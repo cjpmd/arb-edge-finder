@@ -17,7 +17,7 @@ interface Sport {
 }
 
 interface Odds {
-  key: string;
+  id: string;
   sport_key: string;
   sport_title: string;
   commence_time: string;
@@ -50,7 +50,7 @@ serve(async (req) => {
 
     const API_KEY = '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
-    const TARGET_SPORTS = ['soccer_epl', 'basketball_nba', 'tennis_atp'];
+    const TARGET_SPORTS = ['soccer_epl', 'americanfootball_nfl', 'basketball_nba'];
 
     console.log('Starting odds collection...');
 
@@ -87,21 +87,23 @@ serve(async (req) => {
     }
 
     let allOpportunities = [];
+    let totalProcessedEvents = 0;
 
     // Fetch odds for each sport
     for (const sportKey of TARGET_SPORTS) {
       try {
         console.log(`Fetching odds for ${sportKey}...`);
         
-        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=uk,eu&markets=h2h&oddsFormat=decimal&apiKey=${API_KEY}`;
+        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=us&markets=h2h&oddsFormat=decimal&apiKey=${API_KEY}`;
         const response = await fetch(url);
         
         if (!response.ok) {
-          console.error(`HTTP error for ${sportKey}:`, response.status);
+          console.error(`HTTP error for ${sportKey}:`, response.status, response.statusText);
           continue;
         }
         
         const oddsData: Odds[] = await response.json();
+        console.log(`Received ${oddsData.length} events for ${sportKey}`);
         
         // Log API request
         await supabase.from('api_request_log').insert({
@@ -112,100 +114,130 @@ serve(async (req) => {
 
         // Process each event
         for (const event of oddsData) {
-          // Upsert event
-          const { data: eventData, error: eventError } = await supabase
-            .from('events')
-            .upsert({
-              event_key: event.key,
-              sport_key: event.sport_key,
-              sport_title: event.sport_title,
-              commence_time: event.commence_time,
-              home_team: event.home_team,
-              away_team: event.away_team,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'event_key' })
-            .select()
-            .single();
+          try {
+            // Use the event 'id' field as event_key, fallback to generating one
+            const eventKey = event.id || `${event.sport_key}_${event.home_team}_${event.away_team}_${new Date(event.commence_time).getTime()}`;
+            
+            console.log(`Processing event: ${eventKey}`);
 
-          if (eventError || !eventData) {
-            console.error('Error upserting event:', eventError);
-            continue;
-          }
-
-          // Process bookmakers and odds
-          for (const bookmaker of event.bookmakers) {
-            // Upsert bookmaker
-            await supabase
-              .from('bookmakers')
+            // Upsert event
+            const { data: eventData, error: eventError } = await supabase
+              .from('events')
               .upsert({
-                key: bookmaker.key,
-                title: bookmaker.title,
+                event_key: eventKey,
+                sport_key: event.sport_key,
+                sport_title: event.sport_title,
+                commence_time: event.commence_time,
+                home_team: event.home_team,
+                away_team: event.away_team,
                 updated_at: new Date().toISOString()
-              }, { onConflict: 'key' });
+              }, { onConflict: 'event_key' })
+              .select()
+              .single();
 
-            // Process odds
-            if (bookmaker.markets[0]) {
-              for (const outcome of bookmaker.markets[0].outcomes) {
-                await supabase
-                  .from('odds')
-                  .upsert({
-                    event_id: eventData.id,
-                    bookmaker_id: (await supabase.from('bookmakers').select('id').eq('key', bookmaker.key).single()).data?.id,
-                    outcome_name: outcome.name,
-                    outcome_price: outcome.price,
-                    last_update: bookmaker.last_update
-                  }, { onConflict: 'event_id,bookmaker_id,outcome_name' });
+            if (eventError) {
+              console.error('Error upserting event:', eventError);
+              continue;
+            }
+
+            if (!eventData) {
+              console.error('No event data returned after upsert');
+              continue;
+            }
+
+            totalProcessedEvents++;
+
+            // Process bookmakers and odds
+            for (const bookmaker of event.bookmakers) {
+              // Upsert bookmaker
+              const { error: bookmakerError } = await supabase
+                .from('bookmakers')
+                .upsert({
+                  key: bookmaker.key,
+                  title: bookmaker.title,
+                  updated_at: new Date().toISOString()
+                }, { onConflict: 'key' });
+
+              if (bookmakerError) {
+                console.error('Error upserting bookmaker:', bookmakerError);
+                continue;
+              }
+
+              // Get bookmaker ID
+              const { data: bookmakerData } = await supabase
+                .from('bookmakers')
+                .select('id')
+                .eq('key', bookmaker.key)
+                .single();
+
+              if (!bookmakerData) continue;
+
+              // Process odds
+              if (bookmaker.markets[0]) {
+                for (const outcome of bookmaker.markets[0].outcomes) {
+                  await supabase
+                    .from('odds')
+                    .upsert({
+                      event_id: eventData.id,
+                      bookmaker_id: bookmakerData.id,
+                      outcome_name: outcome.name,
+                      outcome_price: outcome.price,
+                      last_update: bookmaker.last_update
+                    }, { onConflict: 'event_id,bookmaker_id,outcome_name' });
+                }
               }
             }
-          }
 
-          // Find arbitrage opportunities for this event
-          const bookmakers = event.bookmakers;
-          
-          for (let i = 0; i < bookmakers.length; i++) {
-            for (let j = i + 1; j < bookmakers.length; j++) {
-              const bookmakerA = bookmakers[i];
-              const bookmakerB = bookmakers[j];
-              
-              if (bookmakerA.markets[0] && bookmakerB.markets[0]) {
-                const marketA = bookmakerA.markets[0];
-                const marketB = bookmakerB.markets[0];
+            // Find arbitrage opportunities for this event
+            const bookmakers = event.bookmakers;
+            
+            for (let i = 0; i < bookmakers.length; i++) {
+              for (let j = i + 1; j < bookmakers.length; j++) {
+                const bookmakerA = bookmakers[i];
+                const bookmakerB = bookmakers[j];
                 
-                for (const outcomeA of marketA.outcomes) {
-                  for (const outcomeB of marketB.outcomes) {
-                    if (outcomeA.name !== outcomeB.name) {
-                      const impliedProbA = 1 / outcomeA.price;
-                      const impliedProbB = 1 / outcomeB.price;
-                      const totalImpliedProb = impliedProbA + impliedProbB;
-                      
-                      const arbPercent = totalImpliedProb * 100;
-                      const profitMargin = ((1 / totalImpliedProb) - 1) * 100;
-                      
-                      if (totalImpliedProb < 1 && profitMargin > 1) {
-                        const bookmakerAData = await supabase.from('bookmakers').select('id').eq('key', bookmakerA.key).single();
-                        const bookmakerBData = await supabase.from('bookmakers').select('id').eq('key', bookmakerB.key).single();
+                if (bookmakerA.markets[0] && bookmakerB.markets[0]) {
+                  const marketA = bookmakerA.markets[0];
+                  const marketB = bookmakerB.markets[0];
+                  
+                  for (const outcomeA of marketA.outcomes) {
+                    for (const outcomeB of marketB.outcomes) {
+                      if (outcomeA.name !== outcomeB.name) {
+                        const impliedProbA = 1 / outcomeA.price;
+                        const impliedProbB = 1 / outcomeB.price;
+                        const totalImpliedProb = impliedProbA + impliedProbB;
+                        
+                        const arbPercent = totalImpliedProb * 100;
+                        const profitMargin = ((1 / totalImpliedProb) - 1) * 100;
+                        
+                        if (totalImpliedProb < 1 && profitMargin > 0.5) {
+                          const bookmakerAData = await supabase.from('bookmakers').select('id').eq('key', bookmakerA.key).single();
+                          const bookmakerBData = await supabase.from('bookmakers').select('id').eq('key', bookmakerB.key).single();
 
-                        if (bookmakerAData.data && bookmakerBData.data) {
-                          await supabase
-                            .from('arbitrage_opportunities')
-                            .upsert({
-                              event_id: eventData.id,
-                              bookmaker_a_id: bookmakerAData.data.id,
-                              bookmaker_b_id: bookmakerBData.data.id,
-                              team_a_odds: outcomeA.price,
-                              team_b_odds: outcomeB.price,
-                              team_a_bookmaker: bookmakerA.title,
-                              team_b_bookmaker: bookmakerB.title,
-                              arb_percent: arbPercent,
-                              profit_margin: profitMargin,
-                              updated_at: new Date().toISOString()
-                            });
+                          if (bookmakerAData.data && bookmakerBData.data) {
+                            const { error: arbError } = await supabase
+                              .from('arbitrage_opportunities')
+                              .upsert({
+                                event_id: eventData.id,
+                                bookmaker_a_id: bookmakerAData.data.id,
+                                bookmaker_b_id: bookmakerBData.data.id,
+                                team_a_odds: outcomeA.price,
+                                team_b_odds: outcomeB.price,
+                                team_a_bookmaker: bookmakerA.title,
+                                team_b_bookmaker: bookmakerB.title,
+                                arb_percent: arbPercent,
+                                profit_margin: profitMargin,
+                                updated_at: new Date().toISOString()
+                              });
 
-                          allOpportunities.push({
-                            sport: event.sport_title,
-                            teams: `${event.home_team} vs ${event.away_team}`,
-                            profitMargin: profitMargin
-                          });
+                            if (!arbError) {
+                              allOpportunities.push({
+                                sport: event.sport_title,
+                                teams: `${event.home_team} vs ${event.away_team}`,
+                                profitMargin: profitMargin
+                              });
+                            }
+                          }
                         }
                       }
                     }
@@ -213,6 +245,8 @@ serve(async (req) => {
                 }
               }
             }
+          } catch (eventProcessError) {
+            console.error(`Error processing event ${event.id}:`, eventProcessError);
           }
         }
 
@@ -223,12 +257,14 @@ serve(async (req) => {
       }
     }
 
+    console.log(`Total events processed: ${totalProcessedEvents}`);
     console.log(`Total arbitrage opportunities found: ${allOpportunities.length}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         opportunitiesFound: allOpportunities.length,
+        eventsProcessed: totalProcessedEvents,
         opportunities: allOpportunities 
       }),
       { 
