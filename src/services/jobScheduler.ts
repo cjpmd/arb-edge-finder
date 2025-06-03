@@ -1,5 +1,5 @@
 
-import { oddsApiService } from './oddsApiService';
+import { supabase } from '@/integrations/supabase/client';
 
 class JobScheduler {
   private intervalId: NodeJS.Timeout | null = null;
@@ -39,15 +39,15 @@ class JobScheduler {
   private async runJob(): Promise<void> {
     try {
       console.log(`[${new Date().toISOString()}] Running odds collection job...`);
-      const opportunities = await oddsApiService.runOddsCollection();
-      console.log(`[${new Date().toISOString()}] Job completed. Found ${opportunities.length} opportunities`);
       
-      // Here you would save the opportunities to your database
-      // For now, we'll just store them in memory or localStorage for demo
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('arbitrage_opportunities', JSON.stringify(opportunities));
-        localStorage.setItem('last_update', new Date().toISOString());
+      const { data, error } = await supabase.functions.invoke('collect-odds');
+      
+      if (error) {
+        console.error(`[${new Date().toISOString()}] Job failed:`, error);
+        return;
       }
+      
+      console.log(`[${new Date().toISOString()}] Job completed. Found ${data?.opportunitiesFound || 0} opportunities`);
       
     } catch (error) {
       console.error(`[${new Date().toISOString()}] Job failed:`, error);

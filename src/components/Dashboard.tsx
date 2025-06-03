@@ -235,7 +235,7 @@ const Dashboard = () => {
                     <h3 className="text-lg font-semibold text-white mb-2">No opportunities found</h3>
                     <p className="text-slate-400">
                       {opportunities.length === 0 
-                        ? "Waiting for data to load. The system fetches new opportunities every 90 minutes."
+                        ? "Click 'Refresh' to fetch new arbitrage opportunities from our database."
                         : "Try adjusting your filters to see more opportunities."
                       }
                     </p>
