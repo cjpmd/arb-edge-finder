@@ -1,97 +1,68 @@
 
-import { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Target, Search, Filter, TrendingUp, Calculator } from "lucide-react";
-import OpportunityCard from "@/components/OpportunityCard";
-import StakeCalculator from "@/components/StakeCalculator";
-import BetSlip from "@/components/BetSlip";
-
-// Mock data for arbitrage opportunities
-const mockOpportunities = [
-  {
-    id: "1",
-    sport: "Football",
-    teamA: "Manchester City",
-    teamB: "Liverpool",
-    startTime: "2024-06-04T15:00:00Z",
-    bookmakerA: { name: "Bet365", odds: 2.10, team: "Manchester City" },
-    bookmakerB: { name: "Betfair", odds: 2.05, team: "Liverpool" },
-    arbPercent: 95.24,
-    profitMargin: 4.76
-  },
-  {
-    id: "2",
-    sport: "Basketball",
-    teamA: "Lakers",
-    teamB: "Warriors",
-    startTime: "2024-06-04T20:00:00Z",
-    bookmakerA: { name: "William Hill", odds: 1.95, team: "Lakers" },
-    bookmakerB: { name: "Pinnacle", odds: 2.15, team: "Warriors" },
-    arbPercent: 97.98,
-    profitMargin: 2.02
-  },
-  {
-    id: "3",
-    sport: "Tennis",
-    teamA: "Djokovic",
-    teamB: "Nadal",
-    startTime: "2024-06-05T14:00:00Z",
-    bookmakerA: { name: "Betfair", odds: 2.25, team: "Djokovic" },
-    bookmakerB: { name: "Bet365", odds: 1.85, team: "Nadal" },
-    arbPercent: 98.46,
-    profitMargin: 1.54
-  },
-  {
-    id: "4",
-    sport: "Football",
-    teamA: "Barcelona",
-    teamB: "Real Madrid",
-    startTime: "2024-06-05T18:00:00Z",
-    bookmakerA: { name: "Pinnacle", odds: 2.40, team: "Barcelona" },
-    bookmakerB: { name: "William Hill", odds: 1.75, team: "Real Madrid" },
-    arbPercent: 98.81,
-    profitMargin: 1.19
-  },
-  {
-    id: "5",
-    sport: "Basketball",
-    teamA: "Celtics",
-    teamB: "Heat",
-    startTime: "2024-06-06T01:00:00Z",
-    bookmakerA: { name: "Bet365", odds: 1.90, team: "Celtics" },
-    bookmakerB: { name: "Betfair", odds: 2.20, team: "Heat" },
-    arbPercent: 98.02,
-    profitMargin: 1.98
-  }
-];
+import { Search, RefreshCw, Target, Clock, TrendingUp } from "lucide-react";
+import OpportunityCard from "./OpportunityCard";
+import StakeCalculator from "./StakeCalculator";
+import BetSlip from "./BetSlip";
+import { useArbitrageData } from "@/hooks/useArbitrageData";
+import { jobScheduler } from "@/services/jobScheduler";
 
 const Dashboard = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sportFilter, setSportFilter] = useState("all");
-  const [minProfit, setMinProfit] = useState(0);
-  const [selectedOpportunity, setSelectedOpportunity] = useState(null);
+  const { opportunities, loading, lastUpdate, refreshData } = useArbitrageData();
+  const [selectedOpportunity, setSelectedOpportunity] = useState<any>(null);
   const [bankroll, setBankroll] = useState(1000);
   const [showBetSlip, setShowBetSlip] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedSport, setSelectedSport] = useState("all");
+  const [minProfit, setMinProfit] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [jobStatus, setJobStatus] = useState(false);
 
-  const filteredOpportunities = useMemo(() => {
-    return mockOpportunities.filter(opp => {
-      const matchesSearch = opp.teamA.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           opp.teamB.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesSport = sportFilter === "all" || opp.sport.toLowerCase() === sportFilter.toLowerCase();
-      const matchesProfit = opp.profitMargin >= minProfit;
-      
-      return matchesSearch && matchesSport && matchesProfit;
-    });
-  }, [searchTerm, sportFilter, minProfit]);
+  // Start the job scheduler when component mounts
+  useEffect(() => {
+    jobScheduler.start();
+    setJobStatus(jobScheduler.isJobRunning());
+    
+    return () => {
+      // Don't stop the job when component unmounts, let it run in background
+    };
+  }, []);
 
-  const totalOpportunities = filteredOpportunities.length;
-  const avgProfit = totalOpportunities > 0 
-    ? (filteredOpportunities.reduce((sum, opp) => sum + opp.profitMargin, 0) / totalOpportunities).toFixed(2)
-    : 0;
+  // Filter opportunities based on search and filters
+  const filteredOpportunities = opportunities.filter(opp => {
+    const matchesSearch = searchTerm === "" || 
+      opp.teamA.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      opp.teamB.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      opp.sport.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesSport = selectedSport === "all" || opp.sport === selectedSport;
+    const matchesProfit = opp.profitMargin >= minProfit;
+    
+    return matchesSearch && matchesSport && matchesProfit;
+  });
+
+  // Get unique sports for filter
+  const availableSports = Array.from(new Set(opportunities.map(opp => opp.sport)));
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleGenerateBetSlip = () => {
+    if (selectedOpportunity) {
+      setShowBetSlip(true);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800">
@@ -101,11 +72,24 @@ const Dashboard = () => {
           <div className="flex items-center space-x-2">
             <Target className="h-8 w-8 text-green-400" />
             <h1 className="text-2xl font-bold text-white">ArbEdge</h1>
+            <Badge variant={jobStatus ? "default" : "secondary"} className="ml-4">
+              {jobStatus ? "Auto-updating" : "Manual mode"}
+            </Badge>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="text-slate-300">Bankroll: ${bankroll.toLocaleString()}</span>
-            <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
-              Account
+            {lastUpdate && (
+              <div className="text-sm text-slate-400">
+                Last update: {new Date(lastUpdate).toLocaleTimeString()}
+              </div>
+            )}
+            <Button 
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              variant="outline"
+              size="sm"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
           </div>
         </div>
@@ -113,43 +97,62 @@ const Dashboard = () => {
 
       <div className="container mx-auto px-4 py-6">
         {/* Stats Cards */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-slate-800 border-slate-700">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-slate-300 text-sm font-medium">Active Opportunities</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-green-400">{totalOpportunities}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800 border-slate-700">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-slate-300 text-sm font-medium">Average Profit</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-blue-400">{avgProfit}%</div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800 border-slate-700">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-slate-300 text-sm font-medium">Best Opportunity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-purple-400">
-                {totalOpportunities > 0 ? Math.max(...filteredOpportunities.map(o => o.profitMargin)).toFixed(2) : 0}%
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-slate-400 text-sm">Active Opportunities</p>
+                  <p className="text-2xl font-bold text-white">{opportunities.length}</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-green-400" />
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800 border-slate-700">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-slate-300 text-sm font-medium">Potential Profit</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-yellow-400">
-                ${totalOpportunities > 0 ? ((bankroll * Math.max(...filteredOpportunities.map(o => o.profitMargin))) / 100).toFixed(0) : 0}
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-slate-400 text-sm">Avg Profit</p>
+                  <p className="text-2xl font-bold text-green-400">
+                    {opportunities.length > 0 
+                      ? (opportunities.reduce((acc, opp) => acc + opp.profitMargin, 0) / opportunities.length).toFixed(2)
+                      : "0.00"
+                    }%
+                  </p>
+                </div>
+                <Target className="h-8 w-8 text-blue-400" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800 border-slate-700">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-slate-400 text-sm">Sports Covered</p>
+                  <p className="text-2xl font-bold text-white">{availableSports.length}</p>
+                </div>
+                <Clock className="h-8 w-8 text-purple-400" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800 border-slate-700">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-slate-400 text-sm">Your Bankroll</p>
+                  <Input
+                    type="number"
+                    value={bankroll}
+                    onChange={(e) => setBankroll(Number(e.target.value))}
+                    className="text-lg font-bold bg-transparent border-none p-0 text-white"
+                    placeholder="1000"
+                  />
+                </div>
+                <span className="text-yellow-400 text-lg font-bold">$</span>
               </div>
             </CardContent>
           </Card>
@@ -158,105 +161,130 @@ const Dashboard = () => {
         {/* Filters */}
         <Card className="bg-slate-800 border-slate-700 mb-6">
           <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              Filters & Search
-            </CardTitle>
+            <CardTitle className="text-white">Filters</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
                 <Input
-                  placeholder="Search teams..."
+                  placeholder="Search teams or sports..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                  className="pl-10 bg-slate-700 border-slate-600 text-white"
                 />
               </div>
-              
-              <Select value={sportFilter} onValueChange={setSportFilter}>
+
+              <Select value={selectedSport} onValueChange={setSelectedSport}>
                 <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                  <SelectValue placeholder="Select sport" />
+                  <SelectValue placeholder="Select Sport" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-700 border-slate-600">
+                <SelectContent>
                   <SelectItem value="all">All Sports</SelectItem>
-                  <SelectItem value="football">Football</SelectItem>
-                  <SelectItem value="basketball">Basketball</SelectItem>
-                  <SelectItem value="tennis">Tennis</SelectItem>
+                  {availableSports.map(sport => (
+                    <SelectItem key={sport} value={sport}>{sport}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
 
-              <Input
-                type="number"
-                placeholder="Min profit %"
-                value={minProfit}
-                onChange={(e) => setMinProfit(Number(e.target.value))}
-                className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-              />
+              <div>
+                <label className="text-slate-400 text-sm mb-2 block">Min Profit %</label>
+                <Input
+                  type="number"
+                  value={minProfit}
+                  onChange={(e) => setMinProfit(Number(e.target.value))}
+                  className="bg-slate-700 border-slate-600 text-white"
+                  min="0"
+                  step="0.1"
+                />
+              </div>
 
-              <Input
-                type="number"
-                placeholder="Bankroll"
-                value={bankroll}
-                onChange={(e) => setBankroll(Number(e.target.value))}
-                className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-              />
+              <div className="flex items-end">
+                <Button 
+                  onClick={() => {
+                    setSearchTerm("");
+                    setSelectedSport("all");
+                    setMinProfit(0);
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Clear Filters
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Main Content */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Opportunities List */}
-          <div className="lg:col-span-2">
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Arbitrage Opportunities
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {filteredOpportunities.map((opportunity) => (
-                    <OpportunityCard
-                      key={opportunity.id}
-                      opportunity={opportunity}
-                      onClick={() => setSelectedOpportunity(opportunity)}
-                      isSelected={selectedOpportunity?.id === opportunity.id}
-                    />
-                  ))}
-                  {filteredOpportunities.length === 0 && (
-                    <div className="text-center py-8 text-slate-400">
-                      No opportunities found matching your criteria.
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-400"></div>
           </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Opportunities List */}
+            <div className="lg:col-span-2 space-y-4">
+              <h2 className="text-xl font-semibold text-white mb-4">
+                Arbitrage Opportunities ({filteredOpportunities.length})
+              </h2>
+              
+              {filteredOpportunities.length === 0 ? (
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardContent className="p-8 text-center">
+                    <Target className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-white mb-2">No opportunities found</h3>
+                    <p className="text-slate-400">
+                      {opportunities.length === 0 
+                        ? "Waiting for data to load. The system fetches new opportunities every 90 minutes."
+                        : "Try adjusting your filters to see more opportunities."
+                      }
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                filteredOpportunities.map((opportunity) => (
+                  <OpportunityCard
+                    key={opportunity.id}
+                    opportunity={opportunity}
+                    onClick={() => setSelectedOpportunity(opportunity)}
+                    isSelected={selectedOpportunity?.id === opportunity.id}
+                  />
+                ))
+              )}
+            </div>
 
-          {/* Calculator & Bet Slip */}
-          <div className="space-y-6">
-            {selectedOpportunity && (
-              <StakeCalculator
-                opportunity={selectedOpportunity}
-                bankroll={bankroll}
-                onGenerateBetSlip={() => setShowBetSlip(true)}
-              />
-            )}
-
-            {showBetSlip && selectedOpportunity && (
-              <BetSlip
-                opportunity={selectedOpportunity}
-                bankroll={bankroll}
-                onClose={() => setShowBetSlip(false)}
-              />
-            )}
+            {/* Stake Calculator */}
+            <div className="space-y-6">
+              {selectedOpportunity ? (
+                <StakeCalculator
+                  opportunity={selectedOpportunity}
+                  bankroll={bankroll}
+                  onGenerateBetSlip={handleGenerateBetSlip}
+                />
+              ) : (
+                <Card className="bg-slate-800 border-slate-700">
+                  <CardContent className="p-8 text-center">
+                    <Calculator className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-white mb-2">Select an Opportunity</h3>
+                    <p className="text-slate-400">
+                      Click on any arbitrage opportunity to calculate your optimal stakes.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
+
+      {/* Bet Slip Modal */}
+      {showBetSlip && selectedOpportunity && (
+        <BetSlip
+          opportunity={selectedOpportunity}
+          bankroll={bankroll}
+          onClose={() => setShowBetSlip(false)}
+        />
+      )}
     </div>
   );
 };
