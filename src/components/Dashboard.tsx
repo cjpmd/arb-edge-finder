@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,7 @@ import StakeCalculator from "./StakeCalculator";
 import BetSlip from "./BetSlip";
 import { useArbitrageData } from "@/hooks/useArbitrageData";
 import { jobScheduler } from "@/services/jobScheduler";
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const { opportunities, loading, lastUpdate, refreshData } = useArbitrageData();
@@ -58,6 +58,22 @@ const Dashboard = () => {
     }
   };
 
+  const handleSeedTestData = async () => {
+    try {
+      console.log('Seeding test data...');
+      const { data, error } = await supabase.functions.invoke('seed-test-data');
+      if (error) {
+        console.error('Error seeding test data:', error);
+      } else {
+        console.log('Test data seeded successfully:', data);
+        // Refresh data after seeding
+        await refreshData();
+      }
+    } catch (error) {
+      console.error('Error calling seed-test-data function:', error);
+    }
+  };
+
   const handleGenerateBetSlip = () => {
     if (selectedOpportunity) {
       setShowBetSlip(true);
@@ -82,6 +98,14 @@ const Dashboard = () => {
                 Last update: {new Date(lastUpdate).toLocaleTimeString()}
               </div>
             )}
+            <Button 
+              onClick={handleSeedTestData}
+              variant="outline"
+              size="sm"
+              className="bg-yellow-600 hover:bg-yellow-700 text-white border-yellow-600"
+            >
+              Seed Test Data
+            </Button>
             <Button 
               onClick={handleRefresh}
               disabled={isRefreshing}
