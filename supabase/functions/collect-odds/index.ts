@@ -214,62 +214,119 @@ serve(async (req) => {
             // Find arbitrage opportunities for this event
             console.log(`Looking for arbitrage opportunities among ${eventBookmakers.length} bookmakers`);
             
+            // Improved arbitrage detection logic
             for (let i = 0; i < eventBookmakers.length; i++) {
               for (let j = i + 1; j < eventBookmakers.length; j++) {
                 const bookmakerA = eventBookmakers[i];
                 const bookmakerB = eventBookmakers[j];
                 
-                // Try all combinations of outcomes between the two bookmakers
-                for (const outcomeA of bookmakerA.outcomes) {
-                  for (const outcomeB of bookmakerB.outcomes) {
-                    // Only consider arbitrage between different outcomes
-                    if (outcomeA.name !== outcomeB.name) {
-                      const oddsA = outcomeA.price;
-                      const oddsB = outcomeB.price;
+                console.log(`Checking arbitrage between ${bookmakerA.title} and ${bookmakerB.title}`);
+                console.log(`BookmakerA outcomes:`, bookmakerA.outcomes);
+                console.log(`BookmakerB outcomes:`, bookmakerB.outcomes);
+                
+                // Find the best odds for each team from each bookmaker
+                const teamAOutcomes = bookmakerA.outcomes.filter(o => o.name === event.home_team);
+                const teamBOutcomes = bookmakerA.outcomes.filter(o => o.name === event.away_team);
+                const teamAOutcomesB = bookmakerB.outcomes.filter(o => o.name === event.home_team);
+                const teamBOutcomesB = bookmakerB.outcomes.filter(o => o.name === event.away_team);
+                
+                // Try different arbitrage combinations:
+                // 1. Team A from bookmaker A vs Team B from bookmaker B
+                if (teamAOutcomes.length > 0 && teamBOutcomesB.length > 0) {
+                  const oddsA = teamAOutcomes[0].price;
+                  const oddsB = teamBOutcomesB[0].price;
+                  
+                  const impliedProbA = 1 / oddsA;
+                  const impliedProbB = 1 / oddsB;
+                  const totalImpliedProb = impliedProbA + impliedProbB;
+                  
+                  console.log(`Checking: ${event.home_team} @ ${oddsA} vs ${event.away_team} @ ${oddsB}, total prob: ${totalImpliedProb}`);
+                  
+                  if (totalImpliedProb < 1) {
+                    const profitMargin = ((1 / totalImpliedProb) - 1) * 100;
+                    const arbPercent = totalImpliedProb * 100;
+                    
+                    // Lower threshold to 0.1% to catch more opportunities
+                    if (profitMargin > 0.1) {
+                      console.log(`Found arbitrage opportunity: ${profitMargin.toFixed(2)}% profit between ${bookmakerA.title} and ${bookmakerB.title}`);
                       
-                      // Calculate implied probabilities
-                      const impliedProbA = 1 / oddsA;
-                      const impliedProbB = 1 / oddsB;
-                      const totalImpliedProb = impliedProbA + impliedProbB;
-                      
-                      // Check for arbitrage opportunity (total implied probability < 1)
-                      if (totalImpliedProb < 1) {
-                        const profitMargin = ((1 / totalImpliedProb) - 1) * 100;
-                        const arbPercent = totalImpliedProb * 100;
-                        
-                        // Only save if profit margin is at least 0.5%
-                        if (profitMargin > 0.5) {
-                          console.log(`Found arbitrage opportunity: ${profitMargin.toFixed(2)}% profit between ${bookmakerA.title} and ${bookmakerB.title}`);
-                          
-                          const { error: arbError } = await supabase
-                            .from('arbitrage_opportunities')
-                            .insert({
-                              event_id: eventData.id,
-                              bookmaker_a_id: bookmakerA.id,
-                              bookmaker_b_id: bookmakerB.id,
-                              team_a_odds: oddsA,
-                              team_b_odds: oddsB,
-                              team_a_bookmaker: bookmakerA.title,
-                              team_b_bookmaker: bookmakerB.title,
-                              arb_percent: arbPercent,
-                              profit_margin: profitMargin,
-                              updated_at: new Date().toISOString()
-                            });
+                      const { error: arbError } = await supabase
+                        .from('arbitrage_opportunities')
+                        .upsert({
+                          event_id: eventData.id,
+                          bookmaker_a_id: bookmakerA.id,
+                          bookmaker_b_id: bookmakerB.id,
+                          team_a_odds: oddsA,
+                          team_b_odds: oddsB,
+                          team_a_bookmaker: bookmakerA.title,
+                          team_b_bookmaker: bookmakerB.title,
+                          arb_percent: arbPercent,
+                          profit_margin: profitMargin,
+                          updated_at: new Date().toISOString()
+                        }, { onConflict: 'event_id,bookmaker_a_id,bookmaker_b_id,team_a_odds,team_b_odds' });
 
-                          if (!arbError) {
-                            allOpportunities.push({
-                              sport: event.sport_title,
-                              teams: `${event.home_team} vs ${event.away_team}`,
-                              profitMargin: profitMargin,
-                              bookmakerA: bookmakerA.title,
-                              bookmakerB: bookmakerB.title,
-                              oddsA: oddsA,
-                              oddsB: oddsB
-                            });
-                          } else {
-                            console.error('Error saving arbitrage opportunity:', arbError);
-                          }
-                        }
+                      if (!arbError) {
+                        allOpportunities.push({
+                          sport: event.sport_title,
+                          teams: `${event.home_team} vs ${event.away_team}`,
+                          profitMargin: profitMargin,
+                          bookmakerA: bookmakerA.title,
+                          bookmakerB: bookmakerB.title,
+                          oddsA: oddsA,
+                          oddsB: oddsB
+                        });
+                      } else {
+                        console.error('Error saving arbitrage opportunity:', arbError);
+                      }
+                    }
+                  }
+                }
+                
+                // 2. Team B from bookmaker A vs Team A from bookmaker B
+                if (teamBOutcomes.length > 0 && teamAOutcomesB.length > 0) {
+                  const oddsA = teamBOutcomes[0].price;
+                  const oddsB = teamAOutcomesB[0].price;
+                  
+                  const impliedProbA = 1 / oddsA;
+                  const impliedProbB = 1 / oddsB;
+                  const totalImpliedProb = impliedProbA + impliedProbB;
+                  
+                  console.log(`Checking: ${event.away_team} @ ${oddsA} vs ${event.home_team} @ ${oddsB}, total prob: ${totalImpliedProb}`);
+                  
+                  if (totalImpliedProb < 1) {
+                    const profitMargin = ((1 / totalImpliedProb) - 1) * 100;
+                    const arbPercent = totalImpliedProb * 100;
+                    
+                    if (profitMargin > 0.1) {
+                      console.log(`Found arbitrage opportunity: ${profitMargin.toFixed(2)}% profit between ${bookmakerA.title} and ${bookmakerB.title}`);
+                      
+                      const { error: arbError } = await supabase
+                        .from('arbitrage_opportunities')
+                        .upsert({
+                          event_id: eventData.id,
+                          bookmaker_a_id: bookmakerA.id,
+                          bookmaker_b_id: bookmakerB.id,
+                          team_a_odds: oddsA,
+                          team_b_odds: oddsB,
+                          team_a_bookmaker: bookmakerA.title,
+                          team_b_bookmaker: bookmakerB.title,
+                          arb_percent: arbPercent,
+                          profit_margin: profitMargin,
+                          updated_at: new Date().toISOString()
+                        }, { onConflict: 'event_id,bookmaker_a_id,bookmaker_b_id,team_a_odds,team_b_odds' });
+
+                      if (!arbError) {
+                        allOpportunities.push({
+                          sport: event.sport_title,
+                          teams: `${event.home_team} vs ${event.away_team}`,
+                          profitMargin: profitMargin,
+                          bookmakerA: bookmakerA.title,
+                          bookmakerB: bookmakerB.title,
+                          oddsA: oddsA,
+                          oddsB: oddsB
+                        });
+                      } else {
+                        console.error('Error saving arbitrage opportunity:', arbError);
                       }
                     }
                   }
