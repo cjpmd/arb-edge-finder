@@ -71,12 +71,11 @@ export const useArbitrageData = () => {
         profitMargin: Number(opp.profit_margin)
       }));
 
-      setOpportunities(transformedData);
-      
+      const liveData = transformedData.filter((opp) => new Date(opp.startTime).getTime() > Date.now());
+      setOpportunities(liveData);
+
       // Set last update time
-      if (transformedData.length > 0) {
-        setLastUpdate(transformedData[0].startTime);
-      }
+      setLastUpdate(new Date().toISOString());
 
     } catch (error) {
       console.error('Error loading arbitrage data:', error);

@@ -53,6 +53,10 @@ serve(async (req) => {
     const TARGET_SPORTS = ['soccer_epl', 'americanfootball_nfl', 'basketball_nba'];
 
     console.log('Starting odds collection...');
+    const MAX_EVENTS_PER_SPORT = 30;
+    const MAX_OPPS_PER_EVENT = 3;
+    const TIME_BUDGET_MS = 18000; // keep under edge function limits
+    const startTime = Date.now();
 
     // Check request quota
     const { data: configData } = await supabase
@@ -88,6 +92,7 @@ serve(async (req) => {
 
     let allOpportunities = [];
     let totalProcessedEvents = 0;
+    let timeExceeded = false;
 
     // Fetch odds for each sport
     for (const sportKey of TARGET_SPORTS) {
@@ -103,8 +108,11 @@ serve(async (req) => {
         }
         
         const oddsData: Odds[] = await response.json();
-        console.log(`Received ${oddsData.length} events for ${sportKey}`);
-        
+        const nowTs = Date.now();
+        const upcoming = oddsData.filter((e) => new Date(e.commence_time).getTime() > nowTs);
+        const eventsToProcess = upcoming.slice(0, MAX_EVENTS_PER_SPORT);
+        console.log(`Received ${oddsData.length} events for ${sportKey} (${eventsToProcess.length} upcoming)`);
+
         // Log API request
         await supabase.from('api_request_log').insert({
           endpoint: `sports/${sportKey}/odds`,
@@ -113,10 +121,11 @@ serve(async (req) => {
         });
 
         // Process each event
-        for (const event of oddsData) {
+        for (const event of eventsToProcess) {
+          if (Date.now() - startTime > TIME_BUDGET_MS) { timeExceeded = true; break; }
           try {
             const eventKey = event.id || `${event.sport_key}_${event.home_team}_${event.away_team}_${new Date(event.commence_time).getTime()}`;
-            
+
             console.log(`Processing event: ${eventKey}`);
 
             // Upsert event
@@ -184,15 +193,13 @@ serve(async (req) => {
                 
                 // Store each outcome
                 for (const outcome of outcomes) {
-                  await supabase
-                    .from('odds')
-                    .insert({
-                      event_id: eventData.id,
-                      bookmaker_id: bookmakerData.id,
-                      outcome_name: outcome.name,
-                      outcome_price: outcome.price,
-                      last_update: bookmaker.last_update
-                    });
+                  eventOddsRows.push({
+                    event_id: eventData.id,
+                    bookmaker_id: bookmakerData.id,
+                    outcome_name: outcome.name,
+                    outcome_price: outcome.price,
+                    last_update: bookmaker.last_update
+                  });
                 }
 
                 // Store bookmaker data for arbitrage calculation
@@ -205,6 +212,16 @@ serve(async (req) => {
               }
             }
 
+            // Batch insert all odds for this event
+            if (eventOddsRows.length) {
+              const { error: oddsInsertError } = await supabase
+                .from('odds')
+                .insert(eventOddsRows);
+              if (oddsInsertError) {
+                console.error('Error inserting odds batch:', oddsInsertError);
+              }
+            }
+
             // Clear existing arbitrage opportunities for this event
             await supabase
               .from('arbitrage_opportunities')
@@ -213,17 +230,16 @@ serve(async (req) => {
 
             // Find arbitrage opportunities for this event
             console.log(`Looking for arbitrage opportunities among ${eventBookmakers.length} bookmakers`);
-            
+            let oppsForEvent = 0;
+
             // Improved arbitrage detection logic
-            for (let i = 0; i < eventBookmakers.length; i++) {
+            pairsLoop: for (let i = 0; i < eventBookmakers.length; i++) {
               for (let j = i + 1; j < eventBookmakers.length; j++) {
                 const bookmakerA = eventBookmakers[i];
                 const bookmakerB = eventBookmakers[j];
                 
-                console.log(`Checking arbitrage between ${bookmakerA.title} and ${bookmakerB.title}`);
-                console.log(`BookmakerA outcomes:`, bookmakerA.outcomes);
-                console.log(`BookmakerB outcomes:`, bookmakerB.outcomes);
-                
+                // Checking pair: reduced verbose logging for performance
+
                 // Find best odds for each outcome across both bookmakers
                 let bestOddsA = { odds: 0, bookmaker: null, team: '' };
                 let bestOddsB = { odds: 0, bookmaker: null, team: '' };
@@ -240,7 +256,7 @@ serve(async (req) => {
                       const impliedProbB = 1 / oddsB;
                       const totalImpliedProb = impliedProbA + impliedProbB;
                       
-                      console.log(`Checking: ${outcomeA.name} @ ${oddsA} (${bookmakerA.title}) vs ${outcomeB.name} @ ${oddsB} (${bookmakerB.title}), total prob: ${totalImpliedProb}`);
+                      // Checking combo
                       
                       // Check for arbitrage opportunity (total implied probability < 1)
                       if (totalImpliedProb < 0.98) { // More realistic threshold - leaves room for practical arbitrage after fees
