@@ -114,9 +114,7 @@ export const useArbitrageData = () => {
   }, []);
 
   const refreshData = async () => {
-    await loadData();
-    
-    // Trigger the Edge Function to collect new odds
+    // Trigger the Edge Function to collect new odds FIRST
     try {
       const { data, error } = await supabase.functions.invoke('collect-odds');
       if (error) {
@@ -127,6 +125,9 @@ export const useArbitrageData = () => {
     } catch (error) {
       console.error('Error calling collect-odds function:', error);
     }
+
+    // Then reload the latest data into the UI
+    await loadData();
   };
 
   return {
