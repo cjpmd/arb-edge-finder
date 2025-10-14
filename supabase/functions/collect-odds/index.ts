@@ -99,7 +99,7 @@ serve(async (req) => {
       try {
         console.log(`Fetching odds for ${sportKey}...`);
         
-        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=us&markets=h2h&oddsFormat=decimal&apiKey=${API_KEY}`;
+        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=us,uk,eu&markets=h2h&oddsFormat=decimal&apiKey=${API_KEY}`;
         const response = await fetch(url);
         
         if (!response.ok) {
@@ -163,6 +163,7 @@ serve(async (req) => {
 
             // Process bookmakers and odds
             const eventBookmakers = [];
+            const eventOddsRows = [];
             for (const bookmaker of event.bookmakers) {
               // Upsert bookmaker
               const { error: bookmakerError } = await supabase
