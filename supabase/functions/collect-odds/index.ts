@@ -50,8 +50,8 @@ serve(async (req) => {
 
     const API_KEY = '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
-    // Prioritize soccer_epl (Premier League) and focus on UK bookmakers
-    const TARGET_SPORTS = ['soccer_epl'];
+    // Focus on UK bookmakers and multiple sports
+    const TARGET_SPORTS = ['soccer_epl', 'soccer_spain_la_liga', 'soccer_germany_bundesliga', 'basketball_nba', 'americanfootball_nfl'];
 
     console.log('Starting odds collection...');
     const MAX_EVENTS_PER_SPORT = 30;
@@ -90,6 +90,13 @@ serve(async (req) => {
         }
       );
     }
+
+    // Clear old opportunities before fetching new ones
+    console.log('Clearing old arbitrage opportunities...');
+    await supabase
+      .from('arbitrage_opportunities')
+      .delete()
+      .lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()); // Delete opportunities older than 24 hours
 
     let allOpportunities = [];
     let totalProcessedEvents = 0;
