@@ -242,14 +242,16 @@ serve(async (req) => {
               .eq('event_id', eventData.id);
 
             // Find arbitrage opportunities for this event
-            console.log(`Looking for arbitrage opportunities among ${eventBookmakers.length} bookmakers`);
+            // Only consider 2-way markets for arbitrage (e.g., NBA/NFL). Soccer is 3-way and requires different logic.
+            const twoWayBookmakers = eventBookmakers.filter(b => b.outcomes?.length === 2);
+            console.log(`Looking for 2-way arbitrage opportunities among ${twoWayBookmakers.length} bookmakers (total books: ${eventBookmakers.length})`);
             let oppsForEvent = 0;
 
-            // Improved arbitrage detection logic
-            pairsLoop: for (let i = 0; i < eventBookmakers.length; i++) {
-              for (let j = i + 1; j < eventBookmakers.length; j++) {
-                const bookmakerA = eventBookmakers[i];
-                const bookmakerB = eventBookmakers[j];
+            // Improved arbitrage detection logic for 2-way markets only
+            pairsLoop: for (let i = 0; i < twoWayBookmakers.length; i++) {
+              for (let j = i + 1; j < twoWayBookmakers.length; j++) {
+                const bookmakerA = twoWayBookmakers[i];
+                const bookmakerB = twoWayBookmakers[j];
                 
                 // Checking pair: reduced verbose logging for performance
 

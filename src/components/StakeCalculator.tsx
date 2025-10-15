@@ -2,6 +2,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calculator, FileText } from "lucide-react";
+import { formatGBP } from "@/lib/utils";
 
 interface Opportunity {
   id: string;
@@ -60,7 +61,7 @@ const StakeCalculator = ({ opportunity, bankroll, onGenerateBetSlip }: StakeCalc
                 <div className="text-xs text-blue-400">@ {opportunity.bookmakerA.odds.toFixed(2)}</div>
               </div>
               <div className="text-right">
-                <div className="text-white font-bold">${stakeA.toFixed(2)}</div>
+                <div className="text-white font-bold">{formatGBP(stakeA)}</div>
                 <div className="text-xs text-slate-400">stake</div>
               </div>
             </div>
@@ -74,7 +75,7 @@ const StakeCalculator = ({ opportunity, bankroll, onGenerateBetSlip }: StakeCalc
                 <div className="text-xs text-green-400">@ {opportunity.bookmakerB.odds.toFixed(2)}</div>
               </div>
               <div className="text-right">
-                <div className="text-white font-bold">${stakeB.toFixed(2)}</div>
+                <div className="text-white font-bold">{formatGBP(stakeB)}</div>
                 <div className="text-xs text-slate-400">stake</div>
               </div>
             </div>
@@ -84,7 +85,7 @@ const StakeCalculator = ({ opportunity, bankroll, onGenerateBetSlip }: StakeCalc
         <div className="bg-slate-900 rounded-lg p-4 border border-green-600">
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
-              <div className="text-green-400 font-bold text-lg">${profit.toFixed(2)}</div>
+              <div className="text-green-400 font-bold text-lg">{formatGBP(profit)}</div>
               <div className="text-xs text-slate-400">Guaranteed Profit</div>
             </div>
             <div>

@@ -167,7 +167,7 @@ const Dashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Your Bankroll</p>
+          <p className="text-slate-400 text-sm">Your Bankroll</p>
                   <Input
                     type="number"
                     value={bankroll}
@@ -176,7 +176,7 @@ const Dashboard = () => {
                     placeholder="1000"
                   />
                 </div>
-                <span className="text-yellow-400 text-lg font-bold">$</span>
+                <span className="text-yellow-400 text-lg font-bold">£</span>
               </div>
             </CardContent>
           </Card>
