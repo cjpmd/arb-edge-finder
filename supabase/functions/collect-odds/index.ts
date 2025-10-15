@@ -50,7 +50,8 @@ serve(async (req) => {
 
     const API_KEY = '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
-    const TARGET_SPORTS = ['soccer_epl', 'americanfootball_nfl', 'basketball_nba'];
+    // Prioritize soccer_epl (Premier League) and focus on UK bookmakers
+    const TARGET_SPORTS = ['soccer_epl'];
 
     console.log('Starting odds collection...');
     const MAX_EVENTS_PER_SPORT = 30;
@@ -99,8 +100,11 @@ serve(async (req) => {
       try {
         console.log(`Fetching odds for ${sportKey}...`);
         
-        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=us,uk,eu&markets=h2h&oddsFormat=decimal&apiKey=${API_KEY}`;
+        // Focus on UK region for better accessibility from UK
+        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=uk&markets=h2h&oddsFormat=decimal&apiKey=${API_KEY}`;
         const response = await fetch(url);
+        
+        console.log(`API URL: ${url.replace(API_KEY, 'REDACTED')}`);
         
         if (!response.ok) {
           console.error(`HTTP error for ${sportKey}:`, response.status, response.statusText);
@@ -192,8 +196,9 @@ serve(async (req) => {
               if (bookmaker.markets[0] && bookmaker.markets[0].outcomes.length >= 2) {
                 const outcomes = bookmaker.markets[0].outcomes;
                 
-                // Store each outcome
+                // Store each outcome with logging
                 for (const outcome of outcomes) {
+                  console.log(`  ${bookmaker.title}: ${outcome.name} @ ${outcome.price} (updated: ${bookmaker.last_update})`);
                   eventOddsRows.push({
                     event_id: eventData.id,
                     bookmaker_id: bookmakerData.id,
