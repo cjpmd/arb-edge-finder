@@ -11,10 +11,11 @@ import BetSlip from "./BetSlip";
 import { useArbitrageData } from "@/hooks/useArbitrageData";
 import { jobScheduler } from "@/services/jobScheduler";
 import { supabase } from "@/integrations/supabase/client";
+import type { Opportunity } from "@/types/arbitrage";
 
 const Dashboard = () => {
   const { opportunities, loading, lastUpdate, refreshData } = useArbitrageData();
-  const [selectedOpportunity, setSelectedOpportunity] = useState<any>(null);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [bankroll, setBankroll] = useState(1000);
   const [showBetSlip, setShowBetSlip] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");

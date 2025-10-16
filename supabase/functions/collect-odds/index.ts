@@ -1,366 +1,110 @@
-
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-interface Sport {
-  key: string;
-  group: string;
-  title: string;
-  description: string;
-  active: boolean;
-  has_outrights: boolean;
-}
-
-interface Odds {
-  id: string;
-  sport_key: string;
-  sport_title: string;
-  commence_time: string;
-  home_team: string;
-  away_team: string;
-  bookmakers: Array<{
-    key: string;
-    title: string;
-    last_update: string;
-    markets: Array<{
-      key: string;
-      outcomes: Array<{
-        name: string;
-        price: number;
-      }>;
-    }>;
-  }>;
-}
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    );
 
     const API_KEY = '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
-    // Focus on UK bookmakers and multiple sports
-    const TARGET_SPORTS = ['soccer_epl', 'soccer_spain_la_liga', 'soccer_germany_bundesliga', 'basketball_nba', 'americanfootball_nfl'];
-
-    console.log('Starting odds collection...');
+    const TARGET_SPORTS = ['soccer_epl', 'soccer_spain_la_liga', 'basketball_nba', 'americanfootball_nfl'];
     const MAX_EVENTS_PER_SPORT = 30;
-    const MAX_OPPS_PER_EVENT = 3;
-    const TIME_BUDGET_MS = 18000; // keep under edge function limits
+    const TIME_BUDGET_MS = 18000;
     const startTime = Date.now();
 
-    // Check request quota
-    const { data: configData } = await supabase
-      .from('config')
-      .select('value')
-      .eq('key', 'max_requests_month')
-      .single();
+    console.log('Starting odds collection...');
 
-    const maxRequests = parseInt(configData?.value || '500');
-    
-    // Get current month's request count
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    await supabase.from('arbitrage_opportunities').delete().lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
-    const { data: requestLog } = await supabase
-      .from('api_request_log')
-      .select('request_count')
-      .gte('timestamp', startOfMonth.toISOString());
-
-    const totalRequests = requestLog?.reduce((sum, log) => sum + log.request_count, 0) || 0;
-
-    if (totalRequests >= maxRequests) {
-      console.log('Request quota exceeded for this month');
-      return new Response(
-        JSON.stringify({ error: 'Request quota exceeded' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 429 
-        }
-      );
-    }
-
-    // Clear old opportunities before fetching new ones
-    console.log('Clearing old arbitrage opportunities...');
-    await supabase
-      .from('arbitrage_opportunities')
-      .delete()
-      .lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()); // Delete opportunities older than 24 hours
-
-    let allOpportunities = [];
+    let allOpportunities: any[] = [];
     let totalProcessedEvents = 0;
-    let timeExceeded = false;
 
-    // Fetch odds for each sport
     for (const sportKey of TARGET_SPORTS) {
+      if (Date.now() - startTime > TIME_BUDGET_MS) break;
+
       try {
-        console.log(`Fetching odds for ${sportKey}...`);
-        
-        // Focus on UK region for better accessibility from UK
         const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=uk&markets=h2h&oddsFormat=decimal&apiKey=${API_KEY}`;
         const response = await fetch(url);
-        
-        console.log(`API URL: ${url.replace(API_KEY, 'REDACTED')}`);
-        
-        if (!response.ok) {
-          console.error(`HTTP error for ${sportKey}:`, response.status, response.statusText);
-          continue;
-        }
-        
-        const oddsData: Odds[] = await response.json();
-        const nowTs = Date.now();
-        const upcoming = oddsData.filter((e) => new Date(e.commence_time).getTime() > nowTs);
-        const eventsToProcess = upcoming.slice(0, MAX_EVENTS_PER_SPORT);
-        console.log(`Received ${oddsData.length} events for ${sportKey} (${eventsToProcess.length} upcoming)`);
+        if (!response.ok) continue;
 
-        // Log API request
-        await supabase.from('api_request_log').insert({
-          endpoint: `sports/${sportKey}/odds`,
-          request_count: 1,
-          remaining_quota: maxRequests - totalRequests - 1
-        });
+        const oddsData = await response.json();
+        const upcoming = oddsData.filter((e: any) => new Date(e.commence_time).getTime() > Date.now()).slice(0, MAX_EVENTS_PER_SPORT);
 
-        // Process each event
-        for (const event of eventsToProcess) {
-          if (Date.now() - startTime > TIME_BUDGET_MS) { timeExceeded = true; break; }
-          try {
-            const eventKey = event.id || `${event.sport_key}_${event.home_team}_${event.away_team}_${new Date(event.commence_time).getTime()}`;
+        for (const event of upcoming) {
+          if (Date.now() - startTime > TIME_BUDGET_MS) break;
 
-            console.log(`Processing event: ${eventKey}`);
+          const eventKey = event.id || `${event.sport_key}_${event.home_team}_${event.away_team}`;
+          const { data: eventData } = await supabase.from('events').upsert({ event_key: eventKey, sport_key: event.sport_key, sport_title: event.sport_title, commence_time: event.commence_time, home_team: event.home_team, away_team: event.away_team, updated_at: new Date().toISOString() }, { onConflict: 'event_key' }).select().single();
+          if (!eventData) continue;
+          
+          totalProcessedEvents++;
+          const eventBookmakers: any[] = [];
 
-            // Upsert event
-            const { data: eventData, error: eventError } = await supabase
-              .from('events')
-              .upsert({
-                event_key: eventKey,
-                sport_key: event.sport_key,
-                sport_title: event.sport_title,
-                commence_time: event.commence_time,
-                home_team: event.home_team,
-                away_team: event.away_team,
-                updated_at: new Date().toISOString()
-              }, { onConflict: 'event_key' })
-              .select()
-              .single();
-
-            if (eventError) {
-              console.error('Error upserting event:', eventError);
-              continue;
+          for (const bookmaker of event.bookmakers) {
+            const { data: bookmakerData } = await supabase.from('bookmakers').upsert({ key: bookmaker.key, title: bookmaker.title, updated_at: new Date().toISOString() }, { onConflict: 'key' }).select().single();
+            if (bookmakerData && bookmaker.markets?.[0]?.outcomes?.length >= 2) {
+              eventBookmakers.push({ id: bookmakerData.id, title: bookmaker.title, outcomes: bookmaker.markets[0].outcomes });
             }
+          }
 
-            if (!eventData) {
-              console.error('No event data returned after upsert');
-              continue;
-            }
+          const twoWay = eventBookmakers.filter(b => b.outcomes.length === 2);
+          const threeWay = eventBookmakers.filter(b => b.outcomes.length === 3);
 
-            totalProcessedEvents++;
-
-            // Clear existing odds for this event
-            await supabase
-              .from('odds')
-              .delete()
-              .eq('event_id', eventData.id);
-
-            // Process bookmakers and odds
-            const eventBookmakers = [];
-            const eventOddsRows = [];
-            for (const bookmaker of event.bookmakers) {
-              // Upsert bookmaker
-              const { error: bookmakerError } = await supabase
-                .from('bookmakers')
-                .upsert({
-                  key: bookmaker.key,
-                  title: bookmaker.title,
-                  updated_at: new Date().toISOString()
-                }, { onConflict: 'key' });
-
-              if (bookmakerError) {
-                console.error('Error upserting bookmaker:', bookmakerError);
-                continue;
-              }
-
-              // Get bookmaker ID
-              const { data: bookmakerData } = await supabase
-                .from('bookmakers')
-                .select('id')
-                .eq('key', bookmaker.key)
-                .single();
-
-              if (!bookmakerData) continue;
-
-              // Process odds
-              if (bookmaker.markets[0] && bookmaker.markets[0].outcomes.length >= 2) {
-                const outcomes = bookmaker.markets[0].outcomes;
-                
-                // Store each outcome with logging
-                for (const outcome of outcomes) {
-                  console.log(`  ${bookmaker.title}: ${outcome.name} @ ${outcome.price} (updated: ${bookmaker.last_update})`);
-                  eventOddsRows.push({
-                    event_id: eventData.id,
-                    bookmaker_id: bookmakerData.id,
-                    outcome_name: outcome.name,
-                    outcome_price: outcome.price,
-                    last_update: bookmaker.last_update
-                  });
-                }
-
-                // Store bookmaker data for arbitrage calculation
-                eventBookmakers.push({
-                  key: bookmaker.key,
-                  title: bookmaker.title,
-                  id: bookmakerData.id,
-                  outcomes: outcomes
-                });
-              }
-            }
-
-            // Batch insert all odds for this event
-            if (eventOddsRows.length) {
-              const { error: oddsInsertError } = await supabase
-                .from('odds')
-                .insert(eventOddsRows);
-              if (oddsInsertError) {
-                console.error('Error inserting odds batch:', oddsInsertError);
-              }
-            }
-
-            // Clear existing arbitrage opportunities for this event
-            await supabase
-              .from('arbitrage_opportunities')
-              .delete()
-              .eq('event_id', eventData.id);
-
-            // Find arbitrage opportunities for this event
-            // Only consider 2-way markets for arbitrage (e.g., NBA/NFL). Soccer is 3-way and requires different logic.
-            const twoWayBookmakers = eventBookmakers.filter(b => b.outcomes?.length === 2);
-            console.log(`Looking for 2-way arbitrage opportunities among ${twoWayBookmakers.length} bookmakers (total books: ${eventBookmakers.length})`);
-            let oppsForEvent = 0;
-
-            // Improved arbitrage detection logic for 2-way markets only
-            pairsLoop: for (let i = 0; i < twoWayBookmakers.length; i++) {
-              for (let j = i + 1; j < twoWayBookmakers.length; j++) {
-                const bookmakerA = twoWayBookmakers[i];
-                const bookmakerB = twoWayBookmakers[j];
-                
-                // Checking pair: reduced verbose logging for performance
-
-                // Find best odds for each outcome across both bookmakers
-                let bestOddsA = { odds: 0, bookmaker: null, team: '' };
-                let bestOddsB = { odds: 0, bookmaker: null, team: '' };
-                
-                // Check all outcome combinations for potential arbitrage
-                for (const outcomeA of bookmakerA.outcomes) {
-                  for (const outcomeB of bookmakerB.outcomes) {
-                    // Only consider different outcomes (opposing bets)
-                    if (outcomeA.name !== outcomeB.name) {
-                      const oddsA = outcomeA.price;
-                      const oddsB = outcomeB.price;
-                      
-                      const impliedProbA = 1 / oddsA;
-                      const impliedProbB = 1 / oddsB;
-                      const totalImpliedProb = impliedProbA + impliedProbB;
-                      
-                      // Checking combo
-                      
-                      // Check for arbitrage opportunity (total implied probability < 1)
-                      if (totalImpliedProb < 0.98) { // More realistic threshold - leaves room for practical arbitrage after fees
-                        const profitMargin = ((1 / totalImpliedProb) - 1) * 100;
-                        const arbPercent = totalImpliedProb * 100;
-                        
-                        console.log(`FOUND ARBITRAGE: ${profitMargin.toFixed(2)}% profit between ${bookmakerA.title} and ${bookmakerB.title}`);
-                        
-                        try {
-                          const { error: arbError } = await supabase
-                            .from('arbitrage_opportunities')
-                            .insert({
-                              event_id: eventData.id,
-                              bookmaker_a_id: bookmakerA.id,
-                              bookmaker_b_id: bookmakerB.id,
-                              team_a_odds: oddsA,
-                              team_b_odds: oddsB,
-                              team_a_bookmaker: bookmakerA.title,
-                              team_b_bookmaker: bookmakerB.title,
-                              arb_percent: arbPercent,
-                              profit_margin: profitMargin
-                            });
-
-                          if (!arbError) {
-                            allOpportunities.push({
-                              sport: event.sport_title,
-                              teams: `${event.home_team} vs ${event.away_team}`,
-                              profitMargin: profitMargin,
-                              bookmakerA: bookmakerA.title,
-                              bookmakerB: bookmakerB.title,
-                              oddsA: oddsA,
-                              oddsB: oddsB,
-                              outcomeA: outcomeA.name,
-                              outcomeB: outcomeB.name
-                            });
-                          } else {
-                            console.error('Error saving arbitrage opportunity:', arbError);
-                          }
-                        } catch (insertError) {
-                          console.error('Database insert error:', insertError);
-                        }
-                      }
+          // 2-way arbitrage
+          for (let i = 0; i < twoWay.length; i++) {
+            for (let j = i + 1; j < twoWay.length; j++) {
+              for (const outcomeA of twoWay[i].outcomes) {
+                for (const outcomeB of twoWay[j].outcomes) {
+                  if (outcomeA.name !== outcomeB.name) {
+                    const totalInv = 1 / outcomeA.price + 1 / outcomeB.price;
+                    if (totalInv < 0.99) {
+                      const profitMargin = (1 / totalInv - 1) * 100;
+                      const outcomes = [{ name: outcomeA.name, odds: outcomeA.price, bookmaker: twoWay[i].title }, { name: outcomeB.name, odds: outcomeB.price, bookmaker: twoWay[j].title }];
+                      await supabase.from('arbitrage_opportunities').insert({ event_id: eventData.id, outcomes, profit_margin: profitMargin, arb_percent: totalInv * 100 });
+                      allOpportunities.push({ id: eventData.id, sport: event.sport_title, teamA: event.home_team, teamB: event.away_team, startTime: event.commence_time, outcomes, profitMargin });
                     }
                   }
                 }
               }
             }
+          }
 
-          } catch (eventProcessError) {
-            console.error(`Error processing event ${event.id}:`, eventProcessError);
+          // 3-way arbitrage
+          for (let i = 0; i < threeWay.length; i++) {
+            for (let j = 0; j < threeWay.length; j++) {
+              for (let k = 0; k < threeWay.length; k++) {
+                if (i !== j && i !== k && j !== k) {
+                  const totalInv = 1 / threeWay[i].outcomes[0].price + 1 / threeWay[j].outcomes[1].price + 1 / threeWay[k].outcomes[2].price;
+                  if (totalInv < 0.99) {
+                    const profitMargin = (1 / totalInv - 1) * 100;
+                    const outcomes = [{ name: threeWay[i].outcomes[0].name, odds: threeWay[i].outcomes[0].price, bookmaker: threeWay[i].title }, { name: threeWay[j].outcomes[1].name, odds: threeWay[j].outcomes[1].price, bookmaker: threeWay[j].title }, { name: threeWay[k].outcomes[2].name, odds: threeWay[k].outcomes[2].price, bookmaker: threeWay[k].title }];
+                    await supabase.from('arbitrage_opportunities').insert({ event_id: eventData.id, outcomes, profit_margin: profitMargin, arb_percent: totalInv * 100 });
+                    allOpportunities.push({ id: eventData.id, sport: event.sport_title, teamA: event.home_team, teamB: event.away_team, startTime: event.commence_time, outcomes, profitMargin });
+                  }
+                }
+              }
+            }
           }
         }
-
-        console.log(`Processed ${oddsData.length} events for ${sportKey}`);
-        
       } catch (error) {
-        console.error(`Error processing ${sportKey}:`, error);
+        console.error(`Error for ${sportKey}:`, error);
       }
     }
 
-    console.log(`Total events processed: ${totalProcessedEvents}`);
-    console.log(`Total arbitrage opportunities found: ${allOpportunities.length}`);
-
-    // Log the found opportunities for debugging
-    if (allOpportunities.length > 0) {
-      console.log('Arbitrage opportunities:', allOpportunities);
-    }
-
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        opportunitiesFound: allOpportunities.length,
-        eventsProcessed: totalProcessedEvents,
-        opportunities: allOpportunities 
-      }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      }
-    );
-
+    return new Response(JSON.stringify({ success: true, eventsProcessed: totalProcessedEvents, opportunitiesFound: allOpportunities.length, opportunities: allOpportunities }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
   } catch (error) {
-    console.error('Error in collect-odds function:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500 
-      }
-    );
+    return new Response(JSON.stringify({ error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
   }
 });

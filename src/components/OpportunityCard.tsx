@@ -1,19 +1,6 @@
-
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Clock, TrendingUp } from "lucide-react";
-
-interface Opportunity {
-  id: string;
-  sport: string;
-  teamA: string;
-  teamB: string;
-  startTime: string;
-  bookmakerA: { name: string; odds: number; team: string };
-  bookmakerB: { name: string; odds: number; team: string };
-  arbPercent: number;
-  profitMargin: number;
-}
+import { TrendingUp } from "lucide-react";
+import type { Opportunity } from "@/types/arbitrage";
 
 interface OpportunityCardProps {
   opportunity: Opportunity;
@@ -22,41 +9,44 @@ interface OpportunityCardProps {
 }
 
 const OpportunityCard = ({ opportunity, onClick, isSelected }: OpportunityCardProps) => {
-  const formatTime = (timeString: string) => {
-    const date = new Date(timeString);
-    return date.toLocaleString();
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
-  const getProfitColor = (profit: number) => {
-    if (profit >= 3) return "text-green-400";
-    if (profit >= 2) return "text-yellow-400";
-    return "text-orange-400";
+  const getProfitColor = (margin: number) => {
+    if (margin >= 5) return 'text-green-400';
+    if (margin >= 3) return 'text-emerald-400';
+    return 'text-blue-400';
   };
+
+  const is3Way = opportunity.outcomes.length === 3;
 
   return (
     <Card 
-      className={`cursor-pointer transition-all duration-200 ${
+      className={`cursor-pointer transition-all hover:shadow-lg ${
         isSelected 
-          ? 'bg-slate-700 border-green-500 shadow-lg' 
-          : 'bg-slate-750 border-slate-600 hover:bg-slate-700 hover:border-slate-500'
+          ? 'bg-slate-700 border-blue-500 border-2' 
+          : 'bg-slate-800 border-slate-700 hover:border-slate-600'
       }`}
       onClick={onClick}
     >
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-3">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Badge variant="outline" className="text-xs">
-                {opportunity.sport}
-              </Badge>
-              <div className="flex items-center text-slate-400 text-xs">
-                <Clock className="h-3 w-3 mr-1" />
-                {formatTime(opportunity.startTime)}
-              </div>
+            <div className="text-xs text-slate-400 uppercase mb-1">
+              {opportunity.sport} {is3Way && '• 3-WAY'}
             </div>
-            <h3 className="text-white font-semibold">
+            <div className="text-white font-semibold">
               {opportunity.teamA} vs {opportunity.teamB}
-            </h3>
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {formatTime(opportunity.startTime)}
+            </div>
           </div>
           <div className="text-right">
             <div className={`text-lg font-bold ${getProfitColor(opportunity.profitMargin)}`}>
@@ -66,27 +56,24 @@ const OpportunityCard = ({ opportunity, onClick, isSelected }: OpportunityCardPr
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-slate-800 rounded-lg p-3">
-            <div className="text-xs text-slate-400 mb-1">{opportunity.bookmakerA.name}</div>
-            <div className="text-white font-medium">{opportunity.bookmakerA.team}</div>
-            <div className="text-blue-400 font-bold">{opportunity.bookmakerA.odds.toFixed(2)}</div>
-          </div>
-          
-          <div className="bg-slate-800 rounded-lg p-3">
-            <div className="text-xs text-slate-400 mb-1">{opportunity.bookmakerB.name}</div>
-            <div className="text-white font-medium">{opportunity.bookmakerB.team}</div>
-            <div className="text-blue-400 font-bold">{opportunity.bookmakerB.odds.toFixed(2)}</div>
-          </div>
+        {/* Dynamic Odds Display */}
+        <div className={`grid gap-2 ${is3Way ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          {opportunity.outcomes.map((outcome, idx) => (
+            <div 
+              key={idx}
+              className="bg-slate-900 rounded p-2"
+            >
+              <div className="text-xs text-slate-400 truncate">{outcome.bookmaker}</div>
+              <div className="text-sm text-white font-medium truncate">{outcome.name}</div>
+              <div className="text-xs text-blue-400">@ {outcome.odds.toFixed(2)}</div>
+            </div>
+          ))}
         </div>
 
-        <div className="mt-3 flex justify-between items-center text-xs">
-          <span className="text-slate-400">
-            Arb%: {opportunity.arbPercent.toFixed(2)}%
-          </span>
-          <div className="flex items-center text-green-400">
-            <TrendingUp className="h-3 w-3 mr-1" />
-            Guaranteed Profit
+        <div className="mt-3 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1 text-slate-400">
+            <TrendingUp className="h-3 w-3" />
+            <span>Arb: {opportunity.arbPercent.toFixed(2)}%</span>
           </div>
         </div>
       </CardContent>
