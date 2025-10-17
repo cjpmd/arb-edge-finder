@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Search, RefreshCw, Target, Clock, TrendingUp, Calculator } from "lucide-react";
+import { RefreshCw, TrendingUp, Calculator, DollarSign, Activity, Filter, Database } from "lucide-react";
 import OpportunityCard from "./OpportunityCard";
 import StakeCalculator from "./StakeCalculator";
 import BetSlip from "./BetSlip";
@@ -22,19 +22,17 @@ const Dashboard = () => {
   const [selectedSport, setSelectedSport] = useState("all");
   const [minProfit, setMinProfit] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [jobStatus, setJobStatus] = useState(false);
+  const [jobStatus, setJobStatus] = useState<'running' | 'idle'>('idle');
 
-  // Start the job scheduler when component mounts
   useEffect(() => {
     jobScheduler.start();
-    setJobStatus(jobScheduler.isJobRunning());
+    setJobStatus(jobScheduler.isJobRunning() ? 'running' : 'idle');
     
     return () => {
-      // Don't stop the job when component unmounts, let it run in background
+      // Keep job running in background
     };
   }, []);
 
-  // Filter opportunities based on search and filters
   const filteredOpportunities = opportunities.filter(opp => {
     const matchesSearch = searchTerm === "" || 
       opp.teamA.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -46,9 +44,6 @@ const Dashboard = () => {
     
     return matchesSearch && matchesSport && matchesProfit;
   });
-
-  // Get unique sports for filter
-  const availableSports = Array.from(new Set(opportunities.map(opp => opp.sport)));
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -67,7 +62,6 @@ const Dashboard = () => {
         console.error('Error seeding test data:', error);
       } else {
         console.log('Test data seeded successfully:', data);
-        // Refresh data after seeding
         await refreshData();
       }
     } catch (error) {
@@ -82,188 +76,181 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800">
-      {/* Header */}
-      <header className="border-b border-slate-700 bg-slate-900/80 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <Target className="h-8 w-8 text-green-400" />
-            <h1 className="text-2xl font-bold text-white">ArbEdge</h1>
-            <Badge variant={jobStatus ? "default" : "secondary"} className="ml-4">
-              {jobStatus ? "Auto-updating" : "Manual mode"}
-            </Badge>
-          </div>
-          <div className="flex items-center space-x-4">
-            {lastUpdate && (
-              <div className="text-sm text-slate-400">
-                Last update: {new Date(lastUpdate).toLocaleTimeString()}
-              </div>
-            )}
-            <Button 
-              onClick={handleSeedTestData}
-              variant="outline"
-              size="sm"
-              className="bg-yellow-600 hover:bg-yellow-700 text-white border-yellow-600"
-            >
-              Seed Test Data
-            </Button>
-            <Button 
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              variant="outline"
-              size="sm"
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
+      {/* Fixed Header */}
+      <header className="sticky top-0 z-50 border-b border-slate-700 bg-slate-800/95 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white">Arbitrage Betting Dashboard</h1>
+              <p className="text-slate-400 mt-1">
+                {jobStatus === 'running' ? (
+                  <span className="text-yellow-400">⚡ Collection in progress...</span>
+                ) : (
+                  <span className="text-green-400">✓ System active</span>
+                )}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              </Button>
+              <Button
+                onClick={handleSeedTestData}
+                variant="outline"
+                className="bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
+              >
+                <Database className="h-4 w-4 mr-2" />
+                Seed Test Data
+              </Button>
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-slate-800 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
+      <main className="flex-1 overflow-hidden">
+        {/* Fixed Stats and Filters Container */}
+        <div className="container mx-auto px-4 py-6 space-y-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardContent className="p-6 flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">Active Opportunities</p>
-                  <p className="text-2xl font-bold text-white">{opportunities.length}</p>
+                  <p className="text-3xl font-bold text-white mt-1">{filteredOpportunities.length}</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-green-400" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-slate-800 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardContent className="p-6 flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Avg Profit</p>
-                  <p className="text-2xl font-bold text-green-400">
-                    {opportunities.length > 0 
-                      ? (opportunities.reduce((acc, opp) => acc + opp.profitMargin, 0) / opportunities.length).toFixed(2)
-                      : "0.00"
-                    }%
+                  <p className="text-slate-400 text-sm">Avg Profit Margin</p>
+                  <p className="text-3xl font-bold text-white mt-1">
+                    {filteredOpportunities.length > 0
+                      ? (filteredOpportunities.reduce((sum, o) => sum + o.profitMargin, 0) / filteredOpportunities.length).toFixed(2)
+                      : '0.00'}%
                   </p>
                 </div>
-                <Target className="h-8 w-8 text-blue-400" />
-              </div>
-            </CardContent>
-          </Card>
+                <DollarSign className="h-8 w-8 text-blue-400" />
+              </CardContent>
+            </Card>
 
-          <Card className="bg-slate-800 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
+            <Card className="bg-slate-800 border-slate-700">
+              <CardContent className="p-6 flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">Sports Covered</p>
-                  <p className="text-2xl font-bold text-white">{availableSports.length}</p>
+                  <p className="text-3xl font-bold text-white mt-1">
+                    {new Set(filteredOpportunities.map(o => o.sport)).size}
+                  </p>
                 </div>
-                <Clock className="h-8 w-8 text-purple-400" />
-              </div>
-            </CardContent>
-          </Card>
+                <Activity className="h-8 w-8 text-purple-400" />
+              </CardContent>
+            </Card>
 
+            <Card className="bg-slate-800 border-slate-700">
+              <CardContent className="p-6">
+                <label className="text-slate-400 text-sm block mb-2">Your Bankroll ($)</label>
+                <Input
+                  type="number"
+                  value={bankroll}
+                  onChange={(e) => setBankroll(Number(e.target.value))}
+                  className="bg-slate-700 border-slate-600 text-white text-xl font-bold"
+                  placeholder="1000"
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Filters */}
           <Card className="bg-slate-800 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filters
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div>
-          <p className="text-slate-400 text-sm">Your Bankroll</p>
+                  <label className="text-slate-400 text-sm block mb-2">Search Teams</label>
                   <Input
-                    type="number"
-                    value={bankroll}
-                    onChange={(e) => setBankroll(Number(e.target.value))}
-                    className="text-lg font-bold bg-transparent border-none p-0 text-white"
-                    placeholder="1000"
+                    placeholder="Search teams..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
                   />
                 </div>
-                <span className="text-yellow-400 text-lg font-bold">£</span>
+
+                <div>
+                  <label className="text-slate-400 text-sm block mb-2">Sport</label>
+                  <Select value={selectedSport} onValueChange={setSelectedSport}>
+                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                      <SelectValue placeholder="All Sports" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border-slate-600 text-white z-50">
+                      <SelectItem value="all" className="text-white hover:bg-slate-600">All Sports</SelectItem>
+                      {Array.from(new Set(opportunities.map(o => o.sport)))
+                        .filter(Boolean)
+                        .map(sport => (
+                          <SelectItem key={sport} value={sport} className="text-white hover:bg-slate-600">
+                            {sport.replace(/_/g, ' ').toUpperCase()}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-slate-400 text-sm block mb-2">Min Profit %</label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={minProfit}
+                    onChange={(e) => setMinProfit(Number(e.target.value))}
+                    className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                    step="0.1"
+                  />
+                </div>
+
+                <Button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedSport('all');
+                    setMinProfit(0);
+                  }}
+                  className="bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
+                >
+                  Clear Filters
+                </Button>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Filters */}
-        <Card className="bg-slate-800 border-slate-700 mb-6">
-          <CardHeader>
-            <CardTitle className="text-white">Filters</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-                <Input
-                  placeholder="Search teams or sports..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-slate-700 border-slate-600 text-white"
-                />
-              </div>
-
-              <Select value={selectedSport} onValueChange={setSelectedSport}>
-                <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                  <SelectValue placeholder="Select Sport" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sports</SelectItem>
-                  {availableSports.map(sport => (
-                    <SelectItem key={sport} value={sport}>{sport}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div>
-                <label className="text-slate-400 text-sm mb-2 block">Min Profit %</label>
-                <Input
-                  type="number"
-                  value={minProfit}
-                  onChange={(e) => setMinProfit(Number(e.target.value))}
-                  className="bg-slate-700 border-slate-600 text-white"
-                  min="0"
-                  step="0.1"
-                />
-              </div>
-
-              <div className="flex items-end">
-                <Button 
-                  onClick={() => {
-                    setSearchTerm("");
-                    setSelectedSport("all");
-                    setMinProfit(0);
-                  }}
-                  variant="outline"
-                  className="w-full"
-                >
-                  Clear Filters
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {loading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-400"></div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Opportunities List */}
-            <div className="lg:col-span-2 space-y-4">
-              <h2 className="text-xl font-semibold text-white mb-4">
-                Arbitrage Opportunities ({filteredOpportunities.length})
+        {/* Scrollable Content Area */}
+        <div className="container mx-auto px-4 pb-6 flex-1 overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+            {/* Scrollable Opportunities List */}
+            <div className="lg:col-span-2 overflow-y-auto max-h-[calc(100vh-420px)] space-y-4 pr-2">
+              <h2 className="text-2xl font-bold text-white sticky top-0 bg-slate-900 py-3 z-10">
+                Arbitrage Opportunities
               </h2>
-              
-              {filteredOpportunities.length === 0 ? (
+              {loading ? (
+                <div className="flex justify-center py-12">
+                  <RefreshCw className="h-8 w-8 animate-spin text-blue-400" />
+                </div>
+              ) : filteredOpportunities.length === 0 ? (
                 <Card className="bg-slate-800 border-slate-700">
-                  <CardContent className="p-8 text-center">
-                    <Target className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-white mb-2">No opportunities found</h3>
-                    <p className="text-slate-400">
-                      {opportunities.length === 0 
-                        ? "Click 'Refresh' to fetch new arbitrage opportunities from our database."
-                        : "Try adjusting your filters to see more opportunities."
-                      }
-                    </p>
+                  <CardContent className="p-12 text-center">
+                    <p className="text-slate-400 text-lg">No arbitrage opportunities found</p>
+                    <p className="text-slate-500 text-sm mt-2">Try adjusting your filters or refresh the data</p>
                   </CardContent>
                 </Card>
               ) : (
@@ -278,8 +265,11 @@ const Dashboard = () => {
               )}
             </div>
 
-            {/* Stake Calculator */}
-            <div className="space-y-6">
+            {/* Scrollable Stake Calculator */}
+            <div className="overflow-y-auto max-h-[calc(100vh-420px)]">
+              <div className="sticky top-0 bg-slate-900 py-3 z-10">
+                <h2 className="text-2xl font-bold text-white">Stake Calculator</h2>
+              </div>
               {selectedOpportunity ? (
                 <StakeCalculator
                   opportunity={selectedOpportunity}
@@ -287,20 +277,17 @@ const Dashboard = () => {
                   onGenerateBetSlip={handleGenerateBetSlip}
                 />
               ) : (
-                <Card className="bg-slate-800 border-slate-700">
-                  <CardContent className="p-8 text-center">
-                    <Calculator className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-white mb-2">Select an Opportunity</h3>
-                    <p className="text-slate-400">
-                      Click on any arbitrage opportunity to calculate your optimal stakes.
-                    </p>
+                <Card className="bg-slate-800 border-slate-700 mt-4">
+                  <CardContent className="p-12 text-center">
+                    <Calculator className="h-12 w-12 text-slate-600 mx-auto mb-4" />
+                    <p className="text-slate-400">Select an opportunity to calculate stakes</p>
                   </CardContent>
                 </Card>
               )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      </main>
 
       {/* Bet Slip Modal */}
       {showBetSlip && selectedOpportunity && (
