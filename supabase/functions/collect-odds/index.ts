@@ -78,17 +78,26 @@ serve(async (req) => {
     let totalMarketsProcessed = 0;
 
     for (const sportKey of TARGET_SPORTS) {
-      if (Date.now() - startTime > TIME_BUDGET_MS) break;
+      if (Date.now() - startTime > TIME_BUDGET_MS) {
+        console.log(`Time budget exceeded, stopping at sport: ${sportKey}`);
+        break;
+      }
 
       try {
+        console.log(`Fetching odds for sport: ${sportKey}`);
         // Fetch multiple markets in one API call
         const marketsParam = MARKET_TYPES.join(',');
         const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=uk&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
         const response = await fetch(url);
-        if (!response.ok) continue;
+        
+        if (!response.ok) {
+          console.log(`Failed to fetch ${sportKey}: ${response.status}`);
+          continue;
+        }
 
         const oddsData = await response.json();
         const upcoming = oddsData.filter((e: any) => new Date(e.commence_time).getTime() > Date.now()).slice(0, MAX_EVENTS_PER_SPORT);
+        console.log(`${sportKey}: Found ${upcoming.length} upcoming events`);
 
         for (const event of upcoming) {
           if (Date.now() - startTime > TIME_BUDGET_MS) break;
