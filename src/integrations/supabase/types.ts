@@ -50,9 +50,11 @@ export type Database = {
           event_id: string | null
           id: string
           is_cross_market: boolean | null
+          is_live: boolean | null
           market_display_name: string | null
           market_key: string | null
           market_line: number | null
+          opportunity_type: string | null
           outcomes: Json | null
           profit_margin: number
           team_a_bookmaker: string
@@ -69,9 +71,11 @@ export type Database = {
           event_id?: string | null
           id?: string
           is_cross_market?: boolean | null
+          is_live?: boolean | null
           market_display_name?: string | null
           market_key?: string | null
           market_line?: number | null
+          opportunity_type?: string | null
           outcomes?: Json | null
           profit_margin: number
           team_a_bookmaker: string
@@ -88,9 +92,11 @@ export type Database = {
           event_id?: string | null
           id?: string
           is_cross_market?: boolean | null
+          is_live?: boolean | null
           market_display_name?: string | null
           market_key?: string | null
           market_line?: number | null
+          opportunity_type?: string | null
           outcomes?: Json | null
           profit_margin?: number
           team_a_bookmaker?: string
@@ -179,6 +185,9 @@ export type Database = {
           event_key: string
           home_team: string
           id: string
+          is_live: boolean | null
+          live_score: Json | null
+          match_time: number | null
           sport_key: string
           sport_title: string
           updated_at: string
@@ -190,6 +199,9 @@ export type Database = {
           event_key: string
           home_team: string
           id?: string
+          is_live?: boolean | null
+          live_score?: Json | null
+          match_time?: number | null
           sport_key: string
           sport_title: string
           updated_at?: string
@@ -201,6 +213,9 @@ export type Database = {
           event_key?: string
           home_team?: string
           id?: string
+          is_live?: boolean | null
+          live_score?: Json | null
+          match_time?: number | null
           sport_key?: string
           sport_title?: string
           updated_at?: string
@@ -213,9 +228,11 @@ export type Database = {
           created_at: string
           event_id: string | null
           id: string
+          is_live: boolean | null
           last_update: string
           market_key: string
           market_line: number | null
+          odds_movement: string | null
           outcomes: Json
         }
         Insert: {
@@ -223,9 +240,11 @@ export type Database = {
           created_at?: string
           event_id?: string | null
           id?: string
+          is_live?: boolean | null
           last_update?: string
           market_key: string
           market_line?: number | null
+          odds_movement?: string | null
           outcomes: Json
         }
         Update: {
@@ -233,9 +252,11 @@ export type Database = {
           created_at?: string
           event_id?: string | null
           id?: string
+          is_live?: boolean | null
           last_update?: string
           market_key?: string
           market_line?: number | null
+          odds_movement?: string | null
           outcomes?: Json
         }
         Relationships: [

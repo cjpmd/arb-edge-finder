@@ -60,6 +60,8 @@ export const useArbitrageData = () => {
           marketKey: item.market_key || 'h2h',
           marketLine: item.market_line,
           isCrossMarket: item.is_cross_market || false,
+          isLive: item.is_live || false,
+          opportunityType: (item.opportunity_type as 'pre-match' | 'live' | 'cross-market') || 'pre-match',
         };
       });
 

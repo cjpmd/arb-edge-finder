@@ -6,20 +6,75 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Market type definitions
-const MARKET_TYPES = ['h2h', 'spreads', 'totals'];
+// Phase 3A: Extended market coverage
+const MARKET_TYPES = ['h2h', 'h2h_3way', 'spreads', 'totals', 'btts', 'draw_no_bet', 'double_chance'];
 const MARKET_MAP: Record<string, { key: string; displayName: string }> = {
   'h2h': { key: 'h2h', displayName: 'Match Winner' },
+  'h2h_3way': { key: 'h2h_3way', displayName: '3-Way (1X2)' },
   'spreads': { key: 'spreads', displayName: 'Spread/Handicap' },
   'totals': { key: 'totals', displayName: 'Over/Under' },
+  'btts': { key: 'btts', displayName: 'Both Teams to Score' },
+  'draw_no_bet': { key: 'draw_no_bet', displayName: 'Draw No Bet' },
+  'double_chance': { key: 'double_chance', displayName: 'Double Chance' },
 };
 
-// Generic arbitrage detection for any number of outcomes
-function detectArbitrage(outcomes: Array<{ odds: number }>): { isArb: boolean; profitMargin: number; arbPercent: number } {
+// Phase 3D: Sport-specific market priorities
+const SPORT_PRIORITY_MARKETS: Record<string, string[]> = {
+  soccer: ['h2h', 'btts', 'totals', 'double_chance', 'h2h_3way'],
+  basketball: ['h2h', 'spreads', 'totals'],
+  tennis: ['h2h'],
+  cricket: ['h2h', 'totals'],
+  americanfootball: ['h2h', 'spreads', 'totals'],
+  default: ['h2h', 'spreads', 'totals']
+};
+
+// Phase 3E: Adaptive thresholds based on opportunity type
+const THRESHOLDS = {
+  pre_match: 0.98,      // 2% minimum profit
+  live: 0.985,          // 1.5% for live markets
+  cross_market: 0.99,   // 1% for synthetic arbs
+  high_volume: 0.995    // 0.5% for liquid markets
+};
+
+// Generic arbitrage detection with configurable threshold
+function detectArbitrage(outcomes: Array<{ odds: number }>, threshold: number = THRESHOLDS.pre_match): { isArb: boolean; profitMargin: number; arbPercent: number } {
   const totalInverse = outcomes.reduce((sum, o) => sum + 1 / o.odds, 0);
-  const isArb = totalInverse < 0.99;
+  const isArb = totalInverse < threshold;
   const profitMargin = isArb ? ((1 / totalInverse) - 1) * 100 : 0;
   return { isArb, profitMargin, arbPercent: totalInverse * 100 };
+}
+
+// Phase 3C: Cross-market arbitrage detection helper
+function detectCrossMarketArb(h2hOdds: any[], doubleChanceOdds: any[]): any[] {
+  const opportunities: any[] = [];
+  
+  // Example: Home win from h2h vs Away/Draw from double_chance
+  for (const h2h of h2hOdds) {
+    const homeOdds = h2h.outcomes.find((o: any) => o.name.toLowerCase().includes('home'))?.price;
+    if (!homeOdds) continue;
+    
+    for (const dc of doubleChanceOdds) {
+      const awayDrawOdds = dc.outcomes.find((o: any) => 
+        o.name.toLowerCase().includes('away') || o.name.toLowerCase().includes('draw')
+      )?.price;
+      
+      if (awayDrawOdds) {
+        const result = detectArbitrage([{ odds: homeOdds }, { odds: awayDrawOdds }], THRESHOLDS.cross_market);
+        if (result.isArb) {
+          opportunities.push({
+            type: 'cross-market',
+            homeBookmaker: h2h.bookmakers.title,
+            awayDrawBookmaker: dc.bookmakers.title,
+            homeOdds,
+            awayDrawOdds,
+            ...result
+          });
+        }
+      }
+    }
+  }
+  
+  return opportunities;
 }
 
 serve(async (req) => {
@@ -139,6 +194,7 @@ serve(async (req) => {
                 bookmaker_id: bookmakerData.id,
                 outcomes: market.outcomes,
                 market_line: marketLine,
+                is_live: false,
                 last_update: new Date().toISOString()
               });
             }
@@ -215,7 +271,9 @@ serve(async (req) => {
                     market_key: marketType,
                     market_display_name: MARKET_MAP[marketType].displayName,
                     market_line: line !== 'default' ? parseFloat(line) : null,
-                    is_cross_market: false
+                    is_cross_market: false,
+                    is_live: false,
+                    opportunity_type: 'pre-match'
                   });
 
                   allOpportunities.push({

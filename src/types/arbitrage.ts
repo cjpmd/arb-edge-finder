@@ -19,4 +19,6 @@ export interface Opportunity {
   marketKey?: string;
   marketLine?: number | null;
   isCrossMarket?: boolean;
+  isLive?: boolean;
+  opportunityType?: 'pre-match' | 'live' | 'cross-market';
 }

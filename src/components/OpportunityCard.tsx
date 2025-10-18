@@ -42,13 +42,23 @@ const OpportunityCard = ({ opportunity, onClick, isSelected }: OpportunityCardPr
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-3">
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="text-xs text-slate-400 uppercase">
                 {opportunity.sport}
               </span>
               <Badge variant="outline" className="bg-purple-900/30 text-purple-300 border-purple-700 text-xs px-2 py-0">
                 {marketDisplay}
               </Badge>
+              {opportunity.isLive && (
+                <Badge className="bg-red-900/50 text-red-300 border-red-700 text-xs px-2 py-0 animate-pulse">
+                  LIVE
+                </Badge>
+              )}
+              {opportunity.isCrossMarket && (
+                <Badge variant="outline" className="bg-amber-900/30 text-amber-300 border-amber-700 text-xs px-2 py-0">
+                  Cross-Market
+                </Badge>
+              )}
             </div>
             <div className="text-white font-semibold">
               {opportunity.teamA} vs {opportunity.teamB}

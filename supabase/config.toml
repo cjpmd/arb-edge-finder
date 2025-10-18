@@ -1,1 +1,10 @@
 project_id = "uabdwvtcxinsdggyjepm"
+
+[functions.collect-odds]
+verify_jwt = false
+
+[functions.collect-live-odds]
+verify_jwt = false
+
+[functions.seed-test-data]
+verify_jwt = false

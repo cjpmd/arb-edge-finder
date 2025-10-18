@@ -69,6 +69,24 @@ const Dashboard = () => {
     }
   };
 
+  const handleCollectLiveOdds = async () => {
+    setIsRefreshing(true);
+    try {
+      console.log('Collecting live odds...');
+      const { data, error } = await supabase.functions.invoke('collect-live-odds');
+      if (error) {
+        console.error('Error collecting live odds:', error);
+      } else {
+        console.log('Live odds collected:', data);
+        await refreshData();
+      }
+    } catch (error) {
+      console.error('Error calling collect-live-odds function:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleGenerateBetSlip = () => {
     if (selectedOpportunity) {
       setShowBetSlip(true);
@@ -98,7 +116,15 @@ const Dashboard = () => {
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                {isRefreshing ? 'Refreshing...' : 'Refresh Pre-Match'}
+              </Button>
+              <Button
+                onClick={handleCollectLiveOdds}
+                disabled={isRefreshing}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Activity className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Collecting...' : 'Collect Live'}
               </Button>
               <Button
                 onClick={handleSeedTestData}
