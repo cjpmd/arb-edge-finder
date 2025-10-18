@@ -15,4 +15,8 @@ export interface Opportunity {
   outcomes: Outcome[];
   arbPercent: number;
   profitMargin: number;
+  market?: string;
+  marketKey?: string;
+  marketLine?: number | null;
+  isCrossMarket?: boolean;
 }

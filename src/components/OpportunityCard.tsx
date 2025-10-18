@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { TrendingUp } from "lucide-react";
 import type { Opportunity } from "@/types/arbitrage";
 
@@ -25,6 +26,9 @@ const OpportunityCard = ({ opportunity, onClick, isSelected }: OpportunityCardPr
   };
 
   const is3Way = opportunity.outcomes.length === 3;
+  const marketDisplay = opportunity.marketLine 
+    ? `${opportunity.market} ${opportunity.marketLine}` 
+    : opportunity.market || 'Match Winner';
 
   return (
     <Card 
@@ -37,9 +41,14 @@ const OpportunityCard = ({ opportunity, onClick, isSelected }: OpportunityCardPr
     >
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-3">
-          <div>
-            <div className="text-xs text-slate-400 uppercase mb-1">
-              {opportunity.sport} {is3Way && '• 3-WAY'}
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-slate-400 uppercase">
+                {opportunity.sport}
+              </span>
+              <Badge variant="outline" className="bg-purple-900/30 text-purple-300 border-purple-700 text-xs px-2 py-0">
+                {marketDisplay}
+              </Badge>
             </div>
             <div className="text-white font-semibold">
               {opportunity.teamA} vs {opportunity.teamB}

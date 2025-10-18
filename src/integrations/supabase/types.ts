@@ -49,6 +49,10 @@ export type Database = {
           created_at: string
           event_id: string | null
           id: string
+          is_cross_market: boolean | null
+          market_display_name: string | null
+          market_key: string | null
+          market_line: number | null
           outcomes: Json | null
           profit_margin: number
           team_a_bookmaker: string
@@ -64,6 +68,10 @@ export type Database = {
           created_at?: string
           event_id?: string | null
           id?: string
+          is_cross_market?: boolean | null
+          market_display_name?: string | null
+          market_key?: string | null
+          market_line?: number | null
           outcomes?: Json | null
           profit_margin: number
           team_a_bookmaker: string
@@ -79,6 +87,10 @@ export type Database = {
           created_at?: string
           event_id?: string | null
           id?: string
+          is_cross_market?: boolean | null
+          market_display_name?: string | null
+          market_key?: string | null
+          market_line?: number | null
           outcomes?: Json | null
           profit_margin?: number
           team_a_bookmaker?: string
@@ -191,6 +203,90 @@ export type Database = {
           id?: string
           sport_key?: string
           sport_title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      market_odds: {
+        Row: {
+          bookmaker_id: string | null
+          created_at: string
+          event_id: string | null
+          id: string
+          last_update: string
+          market_key: string
+          market_line: number | null
+          outcomes: Json
+        }
+        Insert: {
+          bookmaker_id?: string | null
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          last_update?: string
+          market_key: string
+          market_line?: number | null
+          outcomes: Json
+        }
+        Update: {
+          bookmaker_id?: string | null
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          last_update?: string
+          market_key?: string
+          market_line?: number | null
+          outcomes?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_odds_bookmaker_id_fkey"
+            columns: ["bookmaker_id"]
+            isOneToOne: false
+            referencedRelation: "bookmakers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_odds_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      markets: {
+        Row: {
+          applicable_sports: string[] | null
+          created_at: string
+          description: string | null
+          display_name: string
+          id: string
+          market_key: string
+          market_type: string
+          typical_outcomes: Json | null
+          updated_at: string
+        }
+        Insert: {
+          applicable_sports?: string[] | null
+          created_at?: string
+          description?: string | null
+          display_name: string
+          id?: string
+          market_key: string
+          market_type: string
+          typical_outcomes?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          applicable_sports?: string[] | null
+          created_at?: string
+          description?: string | null
+          display_name?: string
+          id?: string
+          market_key?: string
+          market_type?: string
+          typical_outcomes?: Json | null
           updated_at?: string
         }
         Relationships: []

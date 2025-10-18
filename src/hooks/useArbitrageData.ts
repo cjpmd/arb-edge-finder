@@ -56,6 +56,10 @@ export const useArbitrageData = () => {
           outcomes,
           arbPercent: item.arb_percent,
           profitMargin: item.profit_margin,
+          market: item.market_display_name || 'Match Winner',
+          marketKey: item.market_key || 'h2h',
+          marketLine: item.market_line,
+          isCrossMarket: item.is_cross_market || false,
         };
       });
 
