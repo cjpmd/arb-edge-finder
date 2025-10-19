@@ -6,16 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Phase 3A: Extended market coverage
-const MARKET_TYPES = ['h2h', 'h2h_3way', 'spreads', 'totals', 'btts', 'draw_no_bet', 'double_chance'];
+// Phase 3A: Supported market coverage only (per The Odds API)
+const MARKET_TYPES = ['h2h', 'spreads', 'totals'];
 const MARKET_MAP: Record<string, { key: string; displayName: string }> = {
   'h2h': { key: 'h2h', displayName: 'Match Winner' },
-  'h2h_3way': { key: 'h2h_3way', displayName: '3-Way (1X2)' },
   'spreads': { key: 'spreads', displayName: 'Spread/Handicap' },
   'totals': { key: 'totals', displayName: 'Over/Under' },
-  'btts': { key: 'btts', displayName: 'Both Teams to Score' },
-  'draw_no_bet': { key: 'draw_no_bet', displayName: 'Draw No Bet' },
-  'double_chance': { key: 'double_chance', displayName: 'Double Chance' },
 };
 
 // Phase 3D: Sport-specific market priorities
@@ -88,56 +84,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const API_KEY = '928365076820fc52c6d713adefbf0421';
+    const API_KEY = Deno.env.get('THE_ODDS_API_KEY') ?? '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
     
-    // Use sports we know are in-season (October 2025)
-    const TARGET_SPORTS = [
-      // American Football
-      'americanfootball_nfl',
-      
-      // Basketball  
-      'basketball_nba',
-      'basketball_ncaab',
-      'basketball_wnba',
-      
-      // Soccer/Football
-      'soccer_epl',
-      'soccer_spain_la_liga',
-      'soccer_germany_bundesliga',
-      'soccer_italy_serie_a', 
-      'soccer_france_ligue_one',
-      'soccer_uefa_champs_league',
-      'soccer_uefa_europa_league',
-      'soccer_netherlands_eredivisie',
-      'soccer_portugal_primeira_liga',
-      'soccer_turkey_super_league',
-      'soccer_scotland_premiership',
-      'soccer_mexico_ligamx',
-      'soccer_brazil_campeonato',
-      'soccer_argentina_primera_division',
-      'soccer_japan_j_league',
-      'soccer_australia_aleague',
-      
-      // Ice Hockey
-      'icehockey_nhl',
-      'icehockey_sweden_hockey_league',
-      'icehockey_finland_sm_liiga',
-      
-      // Tennis (if active)
-      'tennis_atp',
-      'tennis_wta',
-      
-      // Rugby (if active)
-      'rugbyleague_nrl',
-      'rugby_world_cup',
-      
-      // MMA/Boxing
-      'mma_mixed_martial_arts',
-      'boxing_boxing'
-    ];
-    
-    console.log(`Testing ${TARGET_SPORTS.length} in-season sports`);
+    // Step 1: Fetch all active sports from the API (exclude outright-only sports)
+    console.log('Fetching active sports list...');
+    const sportsResponse = await fetch(`${BASE_URL}/sports/?apiKey=${API_KEY}`);
+    if (!sportsResponse.ok) {
+      throw new Error(`Failed to fetch sports list: ${sportsResponse.status}`);
+    }
+    const allSports = await sportsResponse.json();
+
+    const TARGET_SPORTS: string[] = allSports
+      .filter((sport: any) => sport.active === true && sport.has_outrights !== true)
+      .map((sport: any) => sport.key)
+      .slice(0, 30); // cap to 30 to stay within time budget
+
+    console.log(`Testing ${TARGET_SPORTS.length} active sports for events`);
     const MAX_EVENTS_PER_SPORT = 30;
     const TIME_BUDGET_MS = 18000;
     const startTime = Date.now();
@@ -161,7 +124,7 @@ serve(async (req) => {
         console.log(`Fetching odds for sport: ${sportKey}`);
         // Fetch multiple markets in one API call
         const marketsParam = MARKET_TYPES.join(',');
-        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=uk&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
+        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=us,uk,eu&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
         const response = await fetch(url);
         
         if (!response.ok) {

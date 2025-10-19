@@ -36,7 +36,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const API_KEY = '928365076820fc52c6d713adefbf0421';
+    const API_KEY = Deno.env.get('THE_ODDS_API_KEY') ?? '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
     
     // Step 1: Fetch active sports
@@ -73,7 +73,7 @@ serve(async (req) => {
         
         // Request live odds with inPlay=true parameter
         const marketsParam = LIVE_MARKET_TYPES.join(',');
-        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=uk&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
+        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=us,uk,eu&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
         
         const response = await fetch(url);
         if (!response.ok) {
