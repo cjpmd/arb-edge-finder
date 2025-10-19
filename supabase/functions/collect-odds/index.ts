@@ -26,10 +26,10 @@ const SPORT_PRIORITY_MARKETS: Record<string, string[]> = {
 
 // Phase 3E: Adaptive thresholds based on opportunity type
 const THRESHOLDS = {
-  pre_match: 0.995,     // 0.5% minimum profit - very lenient
-  live: 0.996,          // 0.4% for live markets
-  cross_market: 0.997,  // 0.3% for synthetic arbs
-  high_volume: 0.998    // 0.2% for liquid markets
+  pre_match: 1.00,      // Allow any theoretical arbitrage (even breakeven)
+  live: 1.00,           // Same for live
+  cross_market: 1.00,   // Same for cross-market
+  high_volume: 1.00     // Same for high volume
 };
 
 // Generic arbitrage detection with configurable threshold
