@@ -30,10 +30,10 @@ const SPORT_PRIORITY_MARKETS: Record<string, string[]> = {
 
 // Phase 3E: Adaptive thresholds based on opportunity type
 const THRESHOLDS = {
-  pre_match: 0.98,      // 2% minimum profit
-  live: 0.985,          // 1.5% for live markets
-  cross_market: 0.99,   // 1% for synthetic arbs
-  high_volume: 0.995    // 0.5% for liquid markets
+  pre_match: 0.995,     // 0.5% minimum profit - very lenient
+  live: 0.996,          // 0.4% for live markets
+  cross_market: 0.997,  // 0.3% for synthetic arbs
+  high_volume: 0.998    // 0.2% for liquid markets
 };
 
 // Generic arbitrage detection with configurable threshold
@@ -91,23 +91,53 @@ serve(async (req) => {
     const API_KEY = '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
     
-    // Step 1: Fetch all active sports from the API
-    console.log('Fetching active sports list...');
-    const sportsResponse = await fetch(`${BASE_URL}/sports/?apiKey=${API_KEY}`);
-    if (!sportsResponse.ok) {
-      throw new Error(`Failed to fetch sports list: ${sportsResponse.status}`);
-    }
-    const allSports = await sportsResponse.json();
+    // Use sports we know are in-season (October 2025)
+    const TARGET_SPORTS = [
+      // American Football
+      'americanfootball_nfl',
+      
+      // Basketball  
+      'basketball_nba',
+      'basketball_ncaab',
+      'basketball_wnba',
+      
+      // Soccer/Football
+      'soccer_epl',
+      'soccer_spain_la_liga',
+      'soccer_germany_bundesliga',
+      'soccer_italy_serie_a', 
+      'soccer_france_ligue_one',
+      'soccer_uefa_champs_league',
+      'soccer_uefa_europa_league',
+      'soccer_netherlands_eredivisie',
+      'soccer_portugal_primeira_liga',
+      'soccer_turkey_super_league',
+      'soccer_scotland_premiership',
+      'soccer_mexico_ligamx',
+      'soccer_brazil_campeonato',
+      'soccer_argentina_primera_division',
+      'soccer_japan_j_league',
+      'soccer_australia_aleague',
+      
+      // Ice Hockey
+      'icehockey_nhl',
+      'icehockey_sweden_hockey_league',
+      'icehockey_finland_sm_liiga',
+      
+      // Tennis (if active)
+      'tennis_atp',
+      'tennis_wta',
+      
+      // Rugby (if active)
+      'rugbyleague_nrl',
+      'rugby_world_cup',
+      
+      // MMA/Boxing
+      'mma_mixed_martial_arts',
+      'boxing_boxing'
+    ];
     
-    // Filter for active sports only
-    const activeSports = allSports
-      .filter((sport: any) => sport.active === true)
-      .map((sport: any) => sport.key);
-    
-    console.log(`Found ${activeSports.length} active sports:`, activeSports.slice(0, 10));
-    
-    // Prioritize sports based on typical arbitrage opportunities
-    const TARGET_SPORTS = activeSports.slice(0, 15); // Take first 15 active sports
+    console.log(`Testing ${TARGET_SPORTS.length} in-season sports`);
     const MAX_EVENTS_PER_SPORT = 30;
     const TIME_BUDGET_MS = 18000;
     const startTime = Date.now();
@@ -140,10 +170,27 @@ serve(async (req) => {
         }
 
         const oddsData = await response.json();
-        const upcoming = oddsData.filter((e: any) => new Date(e.commence_time).getTime() > Date.now()).slice(0, MAX_EVENTS_PER_SPORT);
-        console.log(`${sportKey}: Found ${upcoming.length} upcoming events`);
+        
+        // Skip if no events
+        if (!oddsData || oddsData.length === 0) {
+          console.log(`${sportKey}: No events returned from API`);
+          continue;
+        }
+        
+        // Include events starting within last 3 hours (live) and future events
+        const threeHoursAgo = Date.now() - (3 * 60 * 60 * 1000);
+        const relevantEvents = oddsData.filter((e: any) => 
+          new Date(e.commence_time).getTime() > threeHoursAgo
+        ).slice(0, MAX_EVENTS_PER_SPORT);
+        
+        if (relevantEvents.length === 0) {
+          console.log(`${sportKey}: No upcoming or live events`);
+          continue;
+        }
+        
+        console.log(`${sportKey}: Processing ${relevantEvents.length} events (${oddsData.length} total from API)`);
 
-        for (const event of upcoming) {
+        for (const event of relevantEvents) {
           if (Date.now() - startTime > TIME_BUDGET_MS) break;
 
           // Create/update event
