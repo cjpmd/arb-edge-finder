@@ -39,14 +39,19 @@ serve(async (req) => {
     const API_KEY = '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
     
-    // Focus on high-volume live sports
-    const LIVE_SPORTS = [
-      'soccer_epl',
-      'basketball_nba',
-      'tennis_atp_french_open',
-      'americanfootball_nfl',
-      'icehockey_nhl'
-    ];
+    // Step 1: Fetch active sports
+    console.log('Fetching active sports for live odds...');
+    const sportsResponse = await fetch(`${BASE_URL}/sports/?apiKey=${API_KEY}`);
+    if (!sportsResponse.ok) {
+      throw new Error(`Failed to fetch sports: ${sportsResponse.status}`);
+    }
+    const allSports = await sportsResponse.json();
+    const activeSports = allSports
+      .filter((sport: any) => sport.active === true)
+      .map((sport: any) => sport.key);
+    
+    console.log(`Active sports for live betting: ${activeSports.length}`);
+    const LIVE_SPORTS = activeSports.slice(0, 10); // Top 10 active sports
     
     const MAX_EVENTS_PER_SPORT = 10;
     const TIME_BUDGET_MS = 15000;

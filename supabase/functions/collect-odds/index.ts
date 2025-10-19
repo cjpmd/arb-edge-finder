@@ -90,35 +90,24 @@ serve(async (req) => {
 
     const API_KEY = '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
-    const TARGET_SPORTS = [
-      // Soccer
-      'soccer_epl',
-      'soccer_spain_la_liga',
-      'soccer_germany_bundesliga',
-      'soccer_italy_serie_a',
-      'soccer_france_ligue_one',
-      'soccer_uefa_champs_league',
-      'soccer_uefa_europa_league',
-      // American Sports
-      'basketball_nba',
-      'americanfootball_nfl',
-      'icehockey_nhl',
-      'baseball_mlb',
-      // Tennis
-      'tennis_atp_french_open',
-      'tennis_atp_wimbledon',
-      'tennis_atp_us_open',
-      'tennis_wta_french_open',
-      'tennis_wta_wimbledon',
-      // Other Sports
-      'cricket_test_match',
-      'cricket_odi',
-      'rugbyunion_premiership',
-      'mma_mixed_martial_arts',
-      'boxing_heavyweight',
-      'aussierules_afl',
-      'golf_masters_tournament'
-    ];
+    
+    // Step 1: Fetch all active sports from the API
+    console.log('Fetching active sports list...');
+    const sportsResponse = await fetch(`${BASE_URL}/sports/?apiKey=${API_KEY}`);
+    if (!sportsResponse.ok) {
+      throw new Error(`Failed to fetch sports list: ${sportsResponse.status}`);
+    }
+    const allSports = await sportsResponse.json();
+    
+    // Filter for active sports only
+    const activeSports = allSports
+      .filter((sport: any) => sport.active === true)
+      .map((sport: any) => sport.key);
+    
+    console.log(`Found ${activeSports.length} active sports:`, activeSports.slice(0, 10));
+    
+    // Prioritize sports based on typical arbitrage opportunities
+    const TARGET_SPORTS = activeSports.slice(0, 15); // Take first 15 active sports
     const MAX_EVENTS_PER_SPORT = 30;
     const TIME_BUDGET_MS = 18000;
     const startTime = Date.now();
