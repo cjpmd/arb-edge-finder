@@ -39,6 +39,13 @@ serve(async (req) => {
     const API_KEY = Deno.env.get('THE_ODDS_API_KEY') ?? '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
     
+    // Get date range from request body (optional)
+    const requestBody = await req.json().catch(() => ({}));
+    const dateFrom = requestBody.dateFrom ? new Date(requestBody.dateFrom).getTime() : Date.now() - (3 * 60 * 60 * 1000);
+    const dateTo = requestBody.dateTo ? new Date(requestBody.dateTo).getTime() : Date.now() + (7 * 24 * 60 * 60 * 1000);
+    
+    console.log(`Searching for live events between ${new Date(dateFrom).toISOString()} and ${new Date(dateTo).toISOString()}`);
+    
     // Step 1: Fetch active sports
     console.log('Fetching active sports for live odds...');
     const sportsResponse = await fetch(`${BASE_URL}/sports/?apiKey=${API_KEY}`);
@@ -83,12 +90,10 @@ serve(async (req) => {
 
         const oddsData = await response.json();
         
-        // Filter for events that are happening now or very soon (within 2 hours)
+        // Filter events by date range
         const liveOrUpcoming = oddsData.filter((e: any) => {
-          const startTime = new Date(e.commence_time).getTime();
-          const now = Date.now();
-          const twoHoursFromNow = now + (2 * 60 * 60 * 1000);
-          return startTime <= twoHoursFromNow && startTime > now - (90 * 60 * 1000); // Started within last 90 mins
+          const eventTime = new Date(e.commence_time).getTime();
+          return eventTime >= dateFrom && eventTime <= dateTo;
         }).slice(0, MAX_EVENTS_PER_SPORT);
 
         console.log(`${sportKey}: Found ${liveOrUpcoming.length} live/upcoming events`);

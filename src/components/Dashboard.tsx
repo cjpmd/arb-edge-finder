@@ -23,6 +23,12 @@ const Dashboard = () => {
   const [minProfit, setMinProfit] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [jobStatus, setJobStatus] = useState<'running' | 'idle'>('idle');
+  const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0]);
+  const [dateTo, setDateTo] = useState(() => {
+    const future = new Date();
+    future.setDate(future.getDate() + 7);
+    return future.toISOString().split('T')[0];
+  });
 
   useEffect(() => {
     jobScheduler.start();
@@ -48,7 +54,15 @@ const Dashboard = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await refreshData();
+      const { data, error } = await supabase.functions.invoke('collect-odds', {
+        body: { dateFrom, dateTo }
+      });
+      if (error) {
+        console.error('Error collecting odds:', error);
+      } else {
+        console.log('Odds collected:', data);
+        await refreshData();
+      }
     } finally {
       setIsRefreshing(false);
     }
@@ -73,7 +87,9 @@ const Dashboard = () => {
     setIsRefreshing(true);
     try {
       console.log('Collecting live odds...');
-      const { data, error } = await supabase.functions.invoke('collect-live-odds');
+      const { data, error } = await supabase.functions.invoke('collect-live-odds', {
+        body: { dateFrom, dateTo }
+      });
       if (error) {
         console.error('Error collecting live odds:', error);
       } else {
@@ -203,58 +219,81 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div>
-                  <label className="text-slate-400 text-sm block mb-2">Search Teams</label>
-                  <Input
-                    placeholder="Search teams..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                  />
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-slate-400 text-sm block mb-2">Date From</label>
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="bg-slate-700 border-slate-600 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-sm block mb-2">Date To</label>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="bg-slate-700 border-slate-600 text-white"
+                    />
+                  </div>
                 </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                  <div>
+                    <label className="text-slate-400 text-sm block mb-2">Search Teams</label>
+                    <Input
+                      placeholder="Search teams..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                    />
+                  </div>
 
-                <div>
-                  <label className="text-slate-400 text-sm block mb-2">Sport</label>
-                  <Select value={selectedSport} onValueChange={setSelectedSport}>
-                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                      <SelectValue placeholder="All Sports" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-700 border-slate-600 text-white z-50">
-                      <SelectItem value="all" className="text-white hover:bg-slate-600">All Sports</SelectItem>
-                      {Array.from(new Set(opportunities.map(o => o.sport)))
-                        .filter(Boolean)
-                        .map(sport => (
-                          <SelectItem key={sport} value={sport} className="text-white hover:bg-slate-600">
-                            {sport.replace(/_/g, ' ').toUpperCase()}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <div>
+                    <label className="text-slate-400 text-sm block mb-2">Sport</label>
+                    <Select value={selectedSport} onValueChange={setSelectedSport}>
+                      <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                        <SelectValue placeholder="All Sports" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-700 border-slate-600 text-white z-50">
+                        <SelectItem value="all" className="text-white hover:bg-slate-600">All Sports</SelectItem>
+                        {Array.from(new Set(opportunities.map(o => o.sport)))
+                          .filter(Boolean)
+                          .map(sport => (
+                            <SelectItem key={sport} value={sport} className="text-white hover:bg-slate-600">
+                              {sport.replace(/_/g, ' ').toUpperCase()}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 text-sm block mb-2">Min Profit %</label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={minProfit}
+                      onChange={(e) => setMinProfit(Number(e.target.value))}
+                      className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                      step="0.1"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSelectedSport('all');
+                      setMinProfit(0);
+                    }}
+                    className="bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
+                  >
+                    Clear Filters
+                  </Button>
                 </div>
-
-                <div>
-                  <label className="text-slate-400 text-sm block mb-2">Min Profit %</label>
-                  <Input
-                    type="number"
-                    placeholder="0"
-                    value={minProfit}
-                    onChange={(e) => setMinProfit(Number(e.target.value))}
-                    className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                    step="0.1"
-                  />
-                </div>
-
-                <Button
-                  onClick={() => {
-                    setSearchTerm('');
-                    setSelectedSport('all');
-                    setMinProfit(0);
-                  }}
-                  className="bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
-                >
-                  Clear Filters
-                </Button>
               </div>
             </CardContent>
           </Card>
