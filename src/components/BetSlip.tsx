@@ -63,8 +63,8 @@ Expected Return: ${formatGBP(returns[idx])}
 
 📈 SUMMARY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Total Investment: ${formatGBP(bankroll)}
-Guaranteed Profit: ${formatGBP(profit)}
+Total Investment: £${bankroll.toFixed(2)}
+Guaranteed Profit: £${profit.toFixed(2)}
 ROI: ${profitMargin.toFixed(2)}%
 
 ⚠️ IMPORTANT NOTES:
@@ -136,11 +136,11 @@ Generated: ${new Date().toLocaleString('en-GB')}
                 <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-700">
                   <div>
                     <div className="text-xs text-slate-400">Stake</div>
-                    <div className="text-base font-semibold text-green-400">{formatGBP(stakes[idx])}</div>
+                    <div className="text-base font-semibold text-green-400">£{stakes[idx].toFixed(2)}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-slate-400">Expected Return</div>
-                    <div className="text-base font-semibold text-white">{formatGBP(returns[idx])}</div>
+                    <div className="text-base font-semibold text-white">£{returns[idx].toFixed(2)}</div>
                   </div>
                 </div>
               </div>
@@ -153,11 +153,11 @@ Generated: ${new Date().toLocaleString('en-GB')}
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
                 <div className="text-xs text-slate-400 mb-1">Total Investment</div>
-                <div className="text-lg font-bold text-white">{formatGBP(bankroll)}</div>
+                <div className="text-lg font-bold text-white">£{bankroll.toFixed(2)}</div>
               </div>
               <div>
                 <div className="text-xs text-slate-400 mb-1">Guaranteed Profit</div>
-                <div className="text-lg font-bold text-green-400">{formatGBP(profit)}</div>
+                <div className="text-lg font-bold text-green-400">£{profit.toFixed(2)}</div>
               </div>
               <div>
                 <div className="text-xs text-slate-400 mb-1">ROI</div>

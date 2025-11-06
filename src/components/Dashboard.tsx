@@ -8,6 +8,7 @@ import { RefreshCw, TrendingUp, Calculator, DollarSign, Activity, Filter, Databa
 import OpportunityCard from "./OpportunityCard";
 import StakeCalculator from "./StakeCalculator";
 import BetSlip from "./BetSlip";
+import AdvancedSettings from "./AdvancedSettings";
 import { useArbitrageData } from "@/hooks/useArbitrageData";
 import { jobScheduler } from "@/services/jobScheduler";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,9 +27,19 @@ const Dashboard = () => {
   const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0]);
   const [dateTo, setDateTo] = useState(() => {
     const future = new Date();
-    future.setDate(future.getDate() + 7);
+    future.setDate(future.getDate() + 30); // Changed to 30 days
     return future.toISOString().split('T')[0];
   });
+  const [profitThresholds, setProfitThresholds] = useState({
+    preMatch: 0.985,
+    live: 0.990,
+    crossMarket: 0.995,
+  });
+  const [regions, setRegions] = useState(['uk', 'eu']);
+  const [marketTypes, setMarketTypes] = useState(['h2h', 'spreads', 'totals']);
+  const [maxEventsPerSport, setMaxEventsPerSport] = useState(30);
+  const [maxSports, setMaxSports] = useState(30);
+  const [scanResults, setScanResults] = useState<any>(null);
 
   useEffect(() => {
     jobScheduler.start();
@@ -55,12 +66,21 @@ const Dashboard = () => {
     setIsRefreshing(true);
     try {
       const { data, error } = await supabase.functions.invoke('collect-odds', {
-        body: { dateFrom, dateTo }
+        body: { 
+          dateFrom, 
+          dateTo,
+          profitThresholds,
+          regions,
+          marketTypes,
+          maxEventsPerSport,
+          maxSports
+        }
       });
       if (error) {
         console.error('Error collecting odds:', error);
       } else {
         console.log('Odds collected:', data);
+        setScanResults(data);
         await refreshData();
       }
     } finally {
@@ -88,12 +108,21 @@ const Dashboard = () => {
     try {
       console.log('Collecting live odds...');
       const { data, error } = await supabase.functions.invoke('collect-live-odds', {
-        body: { dateFrom, dateTo }
+        body: { 
+          dateFrom, 
+          dateTo,
+          profitThresholds,
+          regions,
+          marketTypes,
+          maxEventsPerSport: 10,
+          maxSports: 10
+        }
       });
       if (error) {
         console.error('Error collecting live odds:', error);
       } else {
         console.log('Live odds collected:', data);
+        setScanResults(data);
         await refreshData();
       }
     } catch (error) {
@@ -198,7 +227,7 @@ const Dashboard = () => {
 
             <Card className="bg-slate-800 border-slate-700">
               <CardContent className="p-6">
-                <label className="text-slate-400 text-sm block mb-2">Your Bankroll ($)</label>
+                <label className="text-slate-400 text-sm block mb-2">Your Bankroll (£)</label>
                 <Input
                   type="number"
                   value={bankroll}
@@ -210,93 +239,119 @@ const Dashboard = () => {
             </Card>
           </div>
 
+          {/* Advanced Settings */}
+          <AdvancedSettings
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            profitThresholds={profitThresholds}
+            onProfitThresholdsChange={setProfitThresholds}
+            regions={regions}
+            onRegionsChange={setRegions}
+            marketTypes={marketTypes}
+            onMarketTypesChange={setMarketTypes}
+            maxEventsPerSport={maxEventsPerSport}
+            onMaxEventsPerSportChange={setMaxEventsPerSport}
+            maxSports={maxSports}
+            onMaxSportsChange={setMaxSports}
+          />
+
           {/* Filters */}
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <Filter className="h-5 w-5" />
-                Filters
+                Display Filters
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-2">Date From</label>
-                    <Input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="bg-slate-700 border-slate-600 text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-2">Date To</label>
-                    <Input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="bg-slate-700 border-slate-600 text-white"
-                    />
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div>
+                  <label className="text-slate-400 text-sm block mb-2">Search Teams</label>
+                  <Input
+                    placeholder="Search teams..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                  />
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-2">Search Teams</label>
-                    <Input
-                      placeholder="Search teams..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                    />
-                  </div>
 
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-2">Sport</label>
-                    <Select value={selectedSport} onValueChange={setSelectedSport}>
-                      <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                        <SelectValue placeholder="All Sports" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-700 border-slate-600 text-white z-50">
-                        <SelectItem value="all" className="text-white hover:bg-slate-600">All Sports</SelectItem>
-                        {Array.from(new Set(opportunities.map(o => o.sport)))
-                          .filter(Boolean)
-                          .map(sport => (
-                            <SelectItem key={sport} value={sport} className="text-white hover:bg-slate-600">
-                              {sport.replace(/_/g, ' ').toUpperCase()}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <label className="text-slate-400 text-sm block mb-2">Min Profit %</label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={minProfit}
-                      onChange={(e) => setMinProfit(Number(e.target.value))}
-                      className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
-                      step="0.1"
-                    />
-                  </div>
-
-                  <Button
-                    onClick={() => {
-                      setSearchTerm('');
-                      setSelectedSport('all');
-                      setMinProfit(0);
-                    }}
-                    className="bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
-                  >
-                    Clear Filters
-                  </Button>
+                <div>
+                  <label className="text-slate-400 text-sm block mb-2">Sport</label>
+                  <Select value={selectedSport} onValueChange={setSelectedSport}>
+                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                      <SelectValue placeholder="All Sports" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-700 border-slate-600 text-white z-50">
+                      <SelectItem value="all" className="text-white hover:bg-slate-600">All Sports</SelectItem>
+                      {Array.from(new Set(opportunities.map(o => o.sport)))
+                        .filter(Boolean)
+                        .map(sport => (
+                          <SelectItem key={sport} value={sport} className="text-white hover:bg-slate-600">
+                            {sport.replace(/_/g, ' ').toUpperCase()}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                <div>
+                  <label className="text-slate-400 text-sm block mb-2">Min Profit %</label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={minProfit}
+                    onChange={(e) => setMinProfit(Number(e.target.value))}
+                    className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-400"
+                    step="0.1"
+                  />
+                </div>
+
+                <Button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedSport('all');
+                    setMinProfit(0);
+                  }}
+                  className="bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
+                >
+                  Clear Filters
+                </Button>
               </div>
             </CardContent>
           </Card>
+          
+          {/* Scan Results Summary */}
+          {scanResults && (
+            <Card className="bg-slate-800 border-slate-700">
+              <CardContent className="p-4">
+                <div className="text-sm text-slate-300">
+                  <div className="font-semibold mb-2">Last Scan Results:</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <span className="text-slate-400">Events: </span>
+                      <span className="text-white">{scanResults.eventsProcessed || 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Markets: </span>
+                      <span className="text-white">{scanResults.marketsProcessed || 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Opportunities: </span>
+                      <span className="text-green-400">{scanResults.opportunitiesFound || 0}</span>
+                    </div>
+                    {scanResults.closestArbitrage && (
+                      <div>
+                        <span className="text-slate-400">Closest: </span>
+                        <span className="text-yellow-400">{scanResults.closestArbitrage}%</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Scrollable Content Area */}

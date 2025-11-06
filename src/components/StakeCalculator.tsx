@@ -72,7 +72,7 @@ const StakeCalculator = ({ opportunity, bankroll, onGenerateBetSlip }: StakeCalc
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-white font-bold">{formatGBP(stakes[idx])}</div>
+                  <div className="text-white font-bold">£{stakes[idx].toFixed(2)}</div>
                   <div className="text-xs text-slate-400">stake</div>
                 </div>
               </div>
@@ -84,7 +84,7 @@ const StakeCalculator = ({ opportunity, bankroll, onGenerateBetSlip }: StakeCalc
         <div className="bg-slate-900 rounded-lg p-4 border border-green-600">
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
-              <div className="text-green-400 font-bold text-lg">{formatGBP(profit)}</div>
+              <div className="text-green-400 font-bold text-lg">£{profit.toFixed(2)}</div>
               <div className="text-xs text-slate-400">Guaranteed Profit</div>
             </div>
             <div>

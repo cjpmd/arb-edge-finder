@@ -18,9 +18,9 @@ const THRESHOLDS = {
   live: 0.985,  // More lenient for live markets (1.5% minimum profit)
 };
 
-function detectArbitrage(outcomes: Array<{ odds: number }>): { isArb: boolean; profitMargin: number; arbPercent: number } {
+function detectArbitrage(outcomes: Array<{ odds: number }>, threshold: number): { isArb: boolean; profitMargin: number; arbPercent: number } {
   const totalInverse = outcomes.reduce((sum, o) => sum + 1 / o.odds, 0);
-  const isArb = totalInverse < THRESHOLDS.live;
+  const isArb = totalInverse < threshold;
   const profitMargin = isArb ? ((1 / totalInverse) - 1) * 100 : 0;
   return { isArb, profitMargin, arbPercent: totalInverse * 100 };
 }
@@ -39,10 +39,19 @@ serve(async (req) => {
     const API_KEY = Deno.env.get('THE_ODDS_API_KEY') ?? '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
     
-    // Get date range from request body (optional)
+    // Get parameters from request body
     const requestBody = await req.json().catch(() => ({}));
     const dateFrom = requestBody.dateFrom ? new Date(requestBody.dateFrom).getTime() : Date.now() - (3 * 60 * 60 * 1000);
     const dateTo = requestBody.dateTo ? new Date(requestBody.dateTo).getTime() : Date.now() + (7 * 24 * 60 * 60 * 1000);
+    
+    // Get profit thresholds
+    const liveThreshold = requestBody.profitThresholds?.live || 1.00;
+    
+    // Get API configuration
+    const regions = requestBody.regions?.join(',') || 'us,uk,eu';
+    const marketTypesFilter = requestBody.marketTypes || ['h2h', 'spreads', 'totals'];
+    const maxEventsPerSport = requestBody.maxEventsPerSport || 10;
+    const maxSportsToScan = requestBody.maxSports || 10;
     
     console.log(`Searching for live events between ${new Date(dateFrom).toISOString()} and ${new Date(dateTo).toISOString()}`);
     
@@ -58,16 +67,16 @@ serve(async (req) => {
       .map((sport: any) => sport.key);
     
     console.log(`Active sports for live betting: ${activeSports.length}`);
-    const LIVE_SPORTS = activeSports.slice(0, 10); // Top 10 active sports
+    const LIVE_SPORTS = activeSports.slice(0, maxSportsToScan);
     
-    const MAX_EVENTS_PER_SPORT = 10;
     const TIME_BUDGET_MS = 15000;
     const startTime = Date.now();
 
     console.log('Starting live odds collection...');
 
-    let liveOpportunities: any[] = 0;
+    let liveOpportunities = 0;
     let totalProcessedEvents = 0;
+    let closestArbitrage = 999;
 
     for (const sportKey of LIVE_SPORTS) {
       if (Date.now() - startTime > TIME_BUDGET_MS) {
@@ -78,9 +87,9 @@ serve(async (req) => {
       try {
         console.log(`Fetching live odds for: ${sportKey}`);
         
-        // Request live odds with inPlay=true parameter
-        const marketsParam = LIVE_MARKET_TYPES.join(',');
-        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=us,uk,eu&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
+        // Request live odds
+        const marketsParam = marketTypesFilter.join(',');
+        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=${regions}&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
         
         const response = await fetch(url);
         if (!response.ok) {
@@ -94,7 +103,7 @@ serve(async (req) => {
         const liveOrUpcoming = oddsData.filter((e: any) => {
           const eventTime = new Date(e.commence_time).getTime();
           return eventTime >= dateFrom && eventTime <= dateTo;
-        }).slice(0, MAX_EVENTS_PER_SPORT);
+        }).slice(0, maxEventsPerSport);
 
         console.log(`${sportKey}: Found ${liveOrUpcoming.length} live/upcoming events`);
 
@@ -149,7 +158,7 @@ serve(async (req) => {
           }
 
           // Detect live arbitrage opportunities
-          for (const marketType of LIVE_MARKET_TYPES) {
+          for (const marketType of marketTypesFilter) {
             if (Date.now() - startTime > TIME_BUDGET_MS) break;
 
             const { data: marketOdds } = await supabase
@@ -196,7 +205,13 @@ serve(async (req) => {
               const combo = Array.from(bestOdds.values());
               if (combo.length !== outcomeArray.length) continue;
 
-              const result = detectArbitrage(combo);
+              const result = detectArbitrage(combo, liveThreshold);
+              
+              // Track closest arbitrage
+              if (result.arbPercent < closestArbitrage) {
+                closestArbitrage = result.arbPercent;
+              }
+              
               if (result.isArb) {
                 await supabase.from('arbitrage_opportunities').insert({
                   event_id: eventData.id,
@@ -226,7 +241,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({ 
       success: true, 
       eventsProcessed: totalProcessedEvents,
-      opportunitiesFound: liveOpportunities
+      opportunitiesFound: liveOpportunities,
+      closestArbitrage: closestArbitrage < 999 ? closestArbitrage.toFixed(2) : null
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { 

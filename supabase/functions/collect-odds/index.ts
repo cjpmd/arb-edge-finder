@@ -87,10 +87,23 @@ serve(async (req) => {
     const API_KEY = Deno.env.get('THE_ODDS_API_KEY') ?? '928365076820fc52c6d713adefbf0421';
     const BASE_URL = 'https://api.the-odds-api.com/v4';
     
-    // Get date range from request body (optional)
+    // Get parameters from request body
     const requestBody = await req.json().catch(() => ({}));
     const dateFrom = requestBody.dateFrom ? new Date(requestBody.dateFrom).getTime() : Date.now() - (3 * 60 * 60 * 1000);
     const dateTo = requestBody.dateTo ? new Date(requestBody.dateTo).getTime() : Date.now() + (30 * 24 * 60 * 60 * 1000);
+    
+    // Get profit thresholds
+    const thresholds = {
+      pre_match: requestBody.profitThresholds?.preMatch || 1.00,
+      live: requestBody.profitThresholds?.live || 1.00,
+      cross_market: requestBody.profitThresholds?.crossMarket || 1.00,
+    };
+    
+    // Get API configuration
+    const regions = requestBody.regions?.join(',') || 'us,uk,eu';
+    const marketTypesFilter = requestBody.marketTypes || ['h2h', 'spreads', 'totals'];
+    const maxEventsPerSport = requestBody.maxEventsPerSport || 30;
+    const maxSportsToScan = requestBody.maxSports || 30;
     
     console.log(`Searching for events between ${new Date(dateFrom).toISOString()} and ${new Date(dateTo).toISOString()}`);
     
@@ -105,10 +118,9 @@ serve(async (req) => {
     const TARGET_SPORTS: string[] = allSports
       .filter((sport: any) => sport.active === true && sport.has_outrights !== true)
       .map((sport: any) => sport.key)
-      .slice(0, 30); // cap to 30 to stay within time budget
+      .slice(0, maxSportsToScan);
 
     console.log(`Testing ${TARGET_SPORTS.length} active sports for events`);
-    const MAX_EVENTS_PER_SPORT = 30;
     const TIME_BUDGET_MS = 18000;
     const startTime = Date.now();
 
@@ -120,6 +132,7 @@ serve(async (req) => {
     let allOpportunities: any[] = [];
     let totalProcessedEvents = 0;
     let totalMarketsProcessed = 0;
+    let closestArbitrage = 999;
 
     for (const sportKey of TARGET_SPORTS) {
       if (Date.now() - startTime > TIME_BUDGET_MS) {
@@ -130,8 +143,8 @@ serve(async (req) => {
       try {
         console.log(`Fetching odds for sport: ${sportKey}`);
         // Fetch multiple markets in one API call
-        const marketsParam = MARKET_TYPES.join(',');
-        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=us,uk,eu&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
+        const marketsParam = marketTypesFilter.join(',');
+        const url = `${BASE_URL}/sports/${sportKey}/odds/?regions=${regions}&markets=${marketsParam}&oddsFormat=decimal&apiKey=${API_KEY}`;
         const response = await fetch(url);
         
         if (!response.ok) {
@@ -151,7 +164,7 @@ serve(async (req) => {
         const relevantEvents = oddsData.filter((e: any) => {
           const eventTime = new Date(e.commence_time).getTime();
           return eventTime >= dateFrom && eventTime <= dateTo;
-        }).slice(0, MAX_EVENTS_PER_SPORT);
+        }).slice(0, maxEventsPerSport);
         
         if (relevantEvents.length === 0) {
           console.log(`${sportKey}: No events in date range`);
@@ -207,7 +220,7 @@ serve(async (req) => {
           }
 
           // Detect arbitrage for each market type
-          for (const marketType of MARKET_TYPES) {
+          for (const marketType of marketTypesFilter) {
             if (Date.now() - startTime > TIME_BUDGET_MS) break;
             totalMarketsProcessed++;
 
@@ -265,7 +278,13 @@ serve(async (req) => {
               for (const combo of getCombinations(outcomeArray, oddsInGroup)) {
                 if (combo.length !== numOutcomes) continue;
 
-                const result = detectArbitrage(combo);
+                const result = detectArbitrage(combo, thresholds.pre_match);
+                
+                // Track closest arbitrage even if not profitable
+                if (result.arbPercent < closestArbitrage) {
+                  closestArbitrage = result.arbPercent;
+                }
+                
                 if (result.isArb) {
                   const outcomes = combo.map(c => ({ name: c.outcome, odds: c.odds, bookmaker: c.bookmaker }));
                   
@@ -309,7 +328,8 @@ serve(async (req) => {
       success: true, 
       eventsProcessed: totalProcessedEvents, 
       marketsProcessed: totalMarketsProcessed,
-      opportunitiesFound: allOpportunities.length, 
+      opportunitiesFound: allOpportunities.length,
+      closestArbitrage: closestArbitrage < 999 ? closestArbitrage.toFixed(2) : null,
       opportunities: allOpportunities.slice(0, 20) // Limit response size
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
   } catch (error) {
