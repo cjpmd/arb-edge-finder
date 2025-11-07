@@ -146,13 +146,52 @@ const AdvancedSettings = ({
                 >
                   Next 90 Days
                 </Button>
+                <Button
+                  onClick={() => setDatePreset(180)}
+                  variant="outline"
+                  size="sm"
+                  className="bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
+                >
+                  Next 6 Months
+                </Button>
+                <Button
+                  onClick={() => setDatePreset(365)}
+                  variant="outline"
+                  size="sm"
+                  className="bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
+                >
+                  Next Year
+                </Button>
               </div>
-              {isPastDate && (
-                <div className="mt-2 text-yellow-400 text-sm">
-                  ⚠️ Warning: Date range includes past dates
-                </div>
-              )}
             </div>
+
+            {/* Manual Date Range Selection */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-slate-300 mb-2 block">Start Date</Label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => onDateFromChange(e.target.value)}
+                  className="bg-slate-700 border-slate-600 text-white"
+                />
+              </div>
+              <div>
+                <Label className="text-slate-300 mb-2 block">End Date</Label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => onDateToChange(e.target.value)}
+                  className="bg-slate-700 border-slate-600 text-white"
+                />
+              </div>
+            </div>
+
+            {isPastDate && (
+              <div className="mt-2 text-yellow-400 text-sm">
+                ⚠️ Warning: Date range includes past dates
+              </div>
+            )}
 
             {/* Profit Thresholds */}
             <div className="space-y-4">
